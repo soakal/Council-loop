@@ -2,7 +2,7 @@
   "target_repo": ".",
   "git_clone_url": null,
   "ceiling": { "max_cycles": 10, "max_minutes": 60 },
-  "revise_attempts": 1,
+  "revise_attempts": 2,
   "models": { "arbiter": "opus", "engineer": "sonnet", "realist": "sonnet" },
   "auto_commit": true,
   "commit_prefix": "council:"
