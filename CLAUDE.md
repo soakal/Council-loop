@@ -13,6 +13,9 @@ commands, subagents, `/loop`) — **no direct Anthropic API calls, no per-token 
 | **Engineer** | `.claude/agents/engineer.md` | Sonnet | Implements exactly that one step (minimal diff). Never commits. |
 | **Realist** | `.claude/agents/realist.md` | Sonnet | Independently reviews → `ACCEPT` / `REVISE`. The brake before commit. |
 
+Models above are the frontmatter fallbacks; `.council/config.json → models` overrides them
+per run (currently Arbiter + Realist on **fable** until 2026-07-07, then revert).
+
 ## Commands
 
 | Command | What it does |

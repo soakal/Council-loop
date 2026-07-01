@@ -3,7 +3,8 @@
   "git_clone_url": null,
   "ceiling": { "max_cycles": 10, "max_minutes": 60 },
   "revise_attempts": 2,
-  "models": { "arbiter": "opus", "engineer": "sonnet", "realist": "sonnet" },
+  "models": { "arbiter": "fable", "engineer": "sonnet", "realist": "fable" },
+  "models_note": "fable trial until 2026-07-07 — after that, revert arbiter to opus and realist to sonnet",
   "auto_commit": true,
   "commit_prefix": "council:"
 }
