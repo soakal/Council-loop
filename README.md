@@ -11,22 +11,29 @@ Arbiter (Opus)  →  Engineer (Sonnet)  →  Realist (Sonnet)  →  commit on AC
    plan               implement             review/critique
 ```
 
-> **New here? Read [QUICKSTART.md](QUICKSTART.md)** — plain-English setup, a double-click
-> launcher (`start-council.cmd`), and a `set-target.ps1` helper. The rest of this file is
-> the fuller reference.
+> **New here? Read [QUICKSTART.md](QUICKSTART.md)** — plain-English setup with a
+> double-click Desktop shortcut, a `start-council.cmd` launcher, and a `set-target.ps1`
+> helper. The rest of this file is the fuller reference.
 
 ## Quick start
 
-1. **Point it at a repo.** Edit `.council/config.json` → set `target_repo` to the
-   absolute path of the repo you want the council to work on. Leave it as `"."` to have
-   the council operate on this folder itself (handy for a first test).
+1. **Point it at a repo.** Easiest — from a PowerShell window in this folder:
+   ```powershell
+   .\set-target.ps1 "C:\path\to\your\repo"
+   ```
+   (Or edit `.council/config.json` → `target_repo` by hand. Leave it as `"."` to have the
+   council operate on this folder itself — handy for a first test.)
 
-2. **Set a goal:**
+2. **Launch it.** Double-click the **`Council Loop`** Desktop shortcut (or
+   `start-council.cmd` in this folder) to open Claude Code here, so the commands load.
+   From a terminal instead: `cd` into this folder and run `claude`.
+
+3. **Set a goal:**
    ```
    /goal Add input validation to the signup form. Acceptance: empty/invalid email is rejected with a message; tests pass.
    ```
 
-3. **Run it autonomously:**
+4. **Run it autonomously:**
    ```
    /loop /council-cycle
    ```
@@ -34,7 +41,7 @@ Arbiter (Opus)  →  Engineer (Sonnet)  →  Realist (Sonnet)  →  commit on AC
    on ACCEPT the change is committed to `target_repo`. The loop stops on its own when the
    ceiling is hit or the goal is complete.
 
-4. **Check in any time:** `/council-status` — shows the goal, cycles used vs. the ceiling,
+5. **Check in any time:** `/council-status` — shows the goal, cycles used vs. the ceiling,
    elapsed time, and recent history. Press `Esc` / `Ctrl-C` (or `/stop`) to halt early.
 
 ## The run ceiling (replaces the old dollar cap)
@@ -54,7 +61,7 @@ The cycle stops when **either** limit is reached, writing `.council/state/stop.f
 |---|---|
 | `target_repo` | Absolute path where edits + commits happen. `"."` = this folder. |
 | `git_clone_url` | Optional — the repo's origin, for reference / cloning elsewhere. |
-| `revise_attempts` | How many Engineer↔Realist revision rounds before a step is deferred (default 1). |
+| `revise_attempts` | How many Engineer↔Realist revision rounds before a step is deferred (default 2). |
 | `models` | Which model each role uses (`opus` / `sonnet` / `haiku` / full ID). |
 | `auto_commit` | Commit accepted steps automatically (`true`) or leave them staged (`false`). |
 | `commit_prefix` | Prefix for council commit messages (default `council:`). |
@@ -84,7 +91,10 @@ regenerated per run.
 .council/
   config.json · config.example.json
   state/     # goal.md · history.jsonl · stop.flag  (runtime, gitignored)
-CLAUDE.md    # project memory / rules for the loop
+CLAUDE.md          # project memory / rules for the loop
+QUICKSTART.md      # plain-English getting-started guide
+start-council.cmd  # double-click launcher (opens Claude Code in this folder)
+set-target.ps1     # set target_repo without hand-editing JSON
 ```
 
 ## Skill authoring mid-run
