@@ -1,0 +1,12 @@
+# Council Loop runtime state (regenerated each run — not source)
+.council/state/goal.md
+.council/state/history.jsonl
+.council/state/stop.flag
+
+# Local overrides
+.council/config.local.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
