@@ -58,6 +58,11 @@ The cycle stops when **either** limit is reached, writing `.council/state/stop.f
 To run the council against a repo you don't have locally: clone it, set `target_repo` to
 its path. The council commits into **that** repo's history.
 
+> **Tip:** give `target_repo` a proper `.gitignore`. As a safety net the commit step
+> already skips common regenerable artifacts (`__pycache__/`, `node_modules/`, `dist/`,
+> `.venv/`, `*.log`, …) and warns you to gitignore them — but the target's own
+> `.gitignore` is the real fix.
+
 ## Portability
 
 Everything lives in this folder — copy `.claude/`, `.council/`, `CLAUDE.md`, and this

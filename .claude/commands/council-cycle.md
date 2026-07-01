@@ -34,8 +34,15 @@ Launch the **realist** subagent with the STEP, the acceptance criteria, and the 
 - Outcome after this section is one of: `accept`, or `deferred` (still REVISE after the budget is spent).
 
 ## 5. Commit (only on ACCEPT)
-- If the verdict is `accept` and `config.auto_commit` is true: in TARGET run `git add -A` then
-  `git commit -m "<commit_prefix> cycle <next_cycle>: <short step summary>"`. Capture the commit SHA (`git -C <TARGET> rev-parse --short HEAD`). If there were no changes to commit, treat as `deferred` with note `no changes produced`.
+- If the verdict is `accept` and `config.auto_commit` is true, commit in TARGET — but **never sweep build artifacts into the commit**:
+  1. Inspect what would be staged: `git -C <TARGET> status --porcelain`.
+  2. **Artifact guard.** Identify any changed paths matching common regenerable-artifact patterns that are NOT already gitignored by TARGET:
+     `__pycache__/`, `*.pyc`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `node_modules/`, `.venv/`, `venv/`, `dist/`, `build/`, `target/`, `*.class`, `*.o`, `*.log`, `.DS_Store`, `Thumbs.db`, `*.tmp`.
+     - If any are present: stage everything **except** those (e.g. `git -C <TARGET> add -A` then `git -C <TARGET> reset -- <artifact paths>`, or add only the real deliverable paths). Print a one-line **WARNING** listing the skipped artifacts and recommend adding them to TARGET's `.gitignore`.
+     - If none: `git -C <TARGET> add -A`.
+  3. Commit: `git -C <TARGET> commit -m "<commit_prefix> cycle <next_cycle>: <short step summary>"`.
+  4. Capture the SHA: `git -C <TARGET> rev-parse --short HEAD`.
+  - If, after the guard, there is nothing real to commit, treat the cycle as `deferred` with note `no changes produced`.
 - On `deferred`: do not commit; leave the working tree as-is for the next cycle.
 
 ## 6. Record + report
