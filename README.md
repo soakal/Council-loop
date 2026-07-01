@@ -81,6 +81,31 @@ README into (or beside) any project, adjust `target_repo`, and the same four com
 work with no other changes. Runtime state (`.council/state/*`) is gitignored and
 regenerated per run.
 
+### Running it on another PC
+
+Move the tool to any Windows machine by **copying the whole `Council loop` folder**, or by
+cloning it fresh:
+
+```
+git clone https://github.com/soakal/Council-loop
+```
+
+Then on that machine:
+
+1. **Install Claude Code** — the one hard requirement (the loop runs on it).
+2. **Set `target_repo` locally:** `.\set-target.ps1 "C:\path\on\this\pc\to\project"` (an
+   absolute path from the old PC won't exist here; use a real one or `"."`).
+3. **Recreate the Desktop shortcut** — the `.lnk` stores the old machine's path and doesn't
+   travel. Just double-click `start-council.cmd`, or right-click it → *Send to → Desktop
+   (create shortcut)*.
+
+The `.claude/` commands + agents, `.council/config.json`, launcher, and helper all resolve
+paths from their own location, so nothing else needs editing.
+
+> **Fresh-Windows note:** PowerShell may block `set-target.ps1` until you allow local
+> scripts once — `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` — or just edit
+> `target_repo` in `.council/config.json` by hand.
+
 ## Layout
 
 ```

@@ -100,6 +100,35 @@ it with more.
 
 ---
 
+## 💻 Running it on another PC
+
+You can move Council Loop to any Windows PC. Two ways to get it there:
+
+- **Copy the whole `Council loop` folder** (USB, network, or cloud drive), **or**
+- On the new PC, download it fresh:
+  ```
+  git clone https://github.com/soakal/Council-loop
+  ```
+  (This way you can grab future updates later with `git pull`.)
+
+Then, on that PC, do three quick things:
+
+1. **Make sure Claude Code is installed** there — that's the one real requirement.
+2. **Point it at a project on that PC:** `.\set-target.ps1 "C:\a\folder\on\this\pc"`
+   (a path from your old PC won't exist here, so set a real one — or leave it as `"."`).
+3. **Make a new Desktop shortcut** — the old one remembers the old PC's location. Easiest:
+   just double-click `start-council.cmd` inside the folder. (Or right-click it →
+   *Send to → Desktop (create shortcut)*.)
+
+Everything else just works from wherever the folder sits.
+
+> **First-PC hiccup:** if `set-target.ps1` won't run (Windows blocks scripts by default),
+> allow local scripts once with:
+> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+> — or just skip the helper and edit `target_repo` in `.council\config.json` by hand.
+
+---
+
 ## 🆘 If something seems off
 
 - **The `/goal` or `/loop` commands aren't recognized?** Close the window and reopen it
