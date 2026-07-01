@@ -41,7 +41,8 @@ if ($normalized -ne '.' -and -not (Test-Path $Path)) {
 }
 
 # Replace only the target_repo value; leave the rest of the file untouched.
-$replacement = '${1}' + $normalized + '${2}'
+# Escape $ so paths like \\server\c$\repo aren't treated as substitution groups.
+$replacement = '${1}' + $normalized.Replace('$', '$$') + '${2}'
 $new = $content -replace '("target_repo"\s*:\s*")[^"]*(")', $replacement
 
 if ($new -eq $content) {
@@ -49,5 +50,7 @@ if ($new -eq $content) {
   exit 1
 }
 
-Set-Content -Path $cfgPath -Value $new -NoNewline -Encoding UTF8
+# Write UTF-8 without BOM (Set-Content -Encoding UTF8 adds a BOM on PowerShell 5.1,
+# which breaks strict JSON parsers).
+[System.IO.File]::WriteAllText($cfgPath, $new, [System.Text.UTF8Encoding]::new($false))
 Write-Host "target_repo set to: $normalized"

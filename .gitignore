@@ -5,6 +5,7 @@
 
 # Local overrides
 .council/config.local.json
+.claude/settings.local.json
 
 # OS / editor
 .DS_Store

@@ -23,7 +23,6 @@ Do this, then confirm:
    <criteria, or "unspecified — Arbiter should infer reasonable criteria">
 
    started_at: <timestamp>
-   cycle: 0
    ```
 5. Truncate `.council/state/history.jsonl` to an empty file.
 6. Delete `.council/state/stop.flag` if it exists.

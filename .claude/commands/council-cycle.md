@@ -1,6 +1,6 @@
 ---
 description: Run ONE council cycle — Arbiter plans, Engineer implements, Realist reviews, commit on accept. Drive it with /loop /council-cycle for autonomous iteration.
-allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Task
+allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Task, Agent
 ---
 
 Run **one** iteration of the council loop, then finish (do NOT loop yourself —
@@ -11,6 +11,8 @@ Paths below are relative to this Council Loop project directory.
 ## 0. Preflight
 - If `.council/state/stop.flag` exists → print its contents and **STOP immediately** (this is how `/loop` terminates cleanly).
 - Read `.council/config.json`. Resolve **TARGET** = `target_repo`; if it is `"."`, TARGET is this project directory. **All code changes and commits happen in TARGET.**
+- Verify TARGET is a git repository (`git -C <TARGET> rev-parse --git-dir`). If not → write `stop.flag` = `target_repo is not a git repository`, print it, STOP.
+- **First cycle only** (history empty or missing): if `git -C <TARGET> status --porcelain` shows uncommitted changes, write `stop.flag` = `target repo has uncommitted changes — commit or stash them first`, print it, STOP. (Skip this on later cycles — a deferred cycle intentionally leaves work in the tree; this guard exists so `git add -A` never sweeps the user's own pre-existing work into a council commit.)
 - If `.council/state/goal.md` is missing → tell the user to run `/goal` first, write `.council/state/stop.flag` containing `no goal set`, and STOP.
 - Read `.council/state/goal.md` (objective, acceptance criteria, `started_at`) and the last ~10 lines of `.council/state/history.jsonl` (treat a missing file as empty history).
 
@@ -21,15 +23,15 @@ Paths below are relative to this Council Loop project directory.
 - If `elapsed_min >= ceiling.max_minutes` → write `stop.flag` = `max_minutes reached`, print it, STOP.
 - `next_cycle = cycles_done + 1`.
 
-## 2. Arbiter — plan (Task → subagent `arbiter`)
-Launch the **arbiter** subagent. Pass it: the objective + acceptance criteria, the TARGET path, and a short digest of prior cycles from history. Ask for the single next step in its STEP/WHY/FILES/VERIFY/RISK format.
+## 2. Arbiter — plan (subagent `arbiter`)
+Launch the **arbiter** subagent (Agent/Task tool), passing `config.models.arbiter` as the model override if set (the agent frontmatter is the fallback). Pass it: the objective + acceptance criteria, the TARGET path, and a short digest of prior cycles from history. Ask for the single next step in its STEP/WHY/FILES/VERIFY/RISK format.
 - If the arbiter replies `GOAL COMPLETE` → append a `"verdict":"complete"` history line, write `stop.flag` = `goal complete`, print a closing summary, STOP.
 
-## 3. Engineer — implement (Task → subagent `engineer`)
-Launch the **engineer** subagent with the arbiter's STEP and the TARGET path. It makes the minimal change and reports CHANGED/SUMMARY/VERIFY_RESULT/NOTES. It must not commit.
+## 3. Engineer — implement (subagent `engineer`)
+Launch the **engineer** subagent (model override: `config.models.engineer`) with the arbiter's STEP and the TARGET path. It makes the minimal change and reports CHANGED/SUMMARY/VERIFY_RESULT/NOTES. It must not commit.
 
-## 4. Realist — review, with bounded revise (Task → subagent `realist`)
-Launch the **realist** subagent with the STEP, the acceptance criteria, and the engineer's report. It returns `VERDICT: ACCEPT` or `VERDICT: REVISE` + FIXES.
+## 4. Realist — review, with bounded revise (subagent `realist`)
+Launch the **realist** subagent (model override: `config.models.realist`) with the STEP, the acceptance criteria, and the engineer's report. It returns `VERDICT: ACCEPT` or `VERDICT: REVISE` + FIXES.
 - If `REVISE` and revise budget remains (`config.revise_attempts`): send the FIXES back to a fresh **engineer** invocation, then re-run the **realist**. Repeat up to `revise_attempts` times.
 - Outcome after this section is one of: `accept`, or `deferred` (still REVISE after the budget is spent).
 
@@ -48,5 +50,6 @@ Launch the **realist** subagent with the STEP, the acceptance criteria, and the 
 ## 6. Record + report
 - Append exactly one JSON line to `.council/state/history.jsonl`:
   `{"cycle": <next_cycle>, "ts": "<utc>", "step": "<short step>", "verdict": "accept|deferred|complete", "commit": "<sha or null>", "notes": "<brief>"}`
+  The line must be valid JSON — escape any `"` or `\` inside the step/notes strings.
 - Print a 3–5 line summary: cycle number, the step, verdict, commit SHA, and cycles remaining (`max_cycles − next_cycle`).
 - Finish. Do not start another cycle.

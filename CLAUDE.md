@@ -21,6 +21,7 @@ commands, subagents, `/loop`) — **no direct Anthropic API calls, no per-token 
 | `/council-cycle` | Runs ONE cycle (Arbiter → Engineer → Realist → commit on accept). |
 | `/council-status` | Shows goal, cycles done vs ceiling, elapsed time, recent history. |
 | `/forge-skill <name> — <behavior>` | Authors a new reusable skill into `.claude/skills/` mid-run. |
+| `/stop [reason]` | Writes `stop.flag` so the loop halts cleanly at the next cycle boundary. |
 
 **Autonomous run:** `/loop /council-cycle` re-invokes the cycle until a `stop.flag` appears.
 

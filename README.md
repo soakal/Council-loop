@@ -62,7 +62,7 @@ The cycle stops when **either** limit is reached, writing `.council/state/stop.f
 | `target_repo` | Absolute path where edits + commits happen. `"."` = this folder. |
 | `git_clone_url` | Optional — the repo's origin, for reference / cloning elsewhere. |
 | `revise_attempts` | How many Engineer↔Realist revision rounds before a step is deferred (default 2). |
-| `models` | Which model each role uses (`opus` / `sonnet` / `haiku` / full ID). |
+| `models` | Which model each role uses (`opus` / `sonnet` / `haiku`) — passed as a model override when each subagent is launched; the frontmatter in `.claude/agents/*.md` is the fallback. |
 | `auto_commit` | Commit accepted steps automatically (`true`) or leave them staged (`false`). |
 | `commit_prefix` | Prefix for council commit messages (default `council:`). |
 
@@ -111,7 +111,7 @@ paths from their own location, so nothing else needs editing.
 ```
 .claude/
   agents/    arbiter.md · engineer.md · realist.md   # the three council roles
-  commands/  goal.md · council-cycle.md · council-status.md · forge-skill.md
+  commands/  goal.md · council-cycle.md · council-status.md · forge-skill.md · stop.md
   skills/    # reusable skills authored mid-run by /forge-skill
 .council/
   config.json · config.example.json
