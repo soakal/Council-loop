@@ -41,10 +41,14 @@ path using **forward slashes**:
 
 ### 2) Start it
 
-**Double-click `start-council.cmd`** in this folder. It opens Claude Code already pointed
-at the right place, so the council commands are available.
+**Double-click the `Council Loop` shortcut on your Desktop** (or `start-council.cmd`
+inside this folder). It opens Claude Code already pointed at the right place, so the
+council commands are available.
 
 (Or from a terminal: `cd "C:\Users\briank\Desktop\Council loop"` then `claude`.)
+
+> If you ever move the `Council loop` folder, recreate the Desktop shortcut (it points at
+> the launcher by its old path).
 
 ### 3) Give it a goal
 
