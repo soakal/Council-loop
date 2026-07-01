@@ -55,6 +55,12 @@ Instead of a per-token cost ceiling, runs are bounded by `.council/config.json �
 The cycle stops when **either** limit is reached, writing `.council/state/stop.flag` so
 `/loop` terminates cleanly. Tune both freely.
 
+Hitting `max_cycles` or `max_minutes` isn't a full stop, though: if you raise `max_cycles`
+(or just wait out the minutes window) and there's now headroom — `cycles_done <
+max_cycles` — the next `/council-cycle` auto-clears the flag, resets `started_at` to now,
+and resumes on its own; just run `/loop /council-cycle` again. (User stops, goal-complete,
+and the git-safety guards are still hard stops — `/goal` is the full reset path for those.)
+
 ## Pointing at another repo
 
 | Field | Meaning |

@@ -9,7 +9,9 @@ Run **one** iteration of the council loop, then finish (do NOT loop yourself —
 Paths below are relative to this Council Loop project directory.
 
 ## 0. Preflight
-- If `.council/state/stop.flag` exists → print its contents and **STOP immediately** (this is how `/loop` terminates cleanly).
+- If `.council/state/stop.flag` exists, classify its contents:
+  - **Ceiling reason** (`max_cycles reached (N)` or `max_minutes reached`): count lines in `.council/state/history.jsonl` as `cycles_done` (0 if missing). If `cycles_done < ceiling.max_cycles` (headroom remains) → delete `stop.flag`, set `started_at` in `.council/state/goal.md` to now (fresh minutes window), print a one-line `resuming — ceiling had headroom (cycles_done/max_cycles)` note, and continue preflight below. Otherwise (no headroom) → print the flag's contents and **STOP immediately**.
+  - **Any other reason** (`user requested stop`, `goal complete`, `no goal set`, `target_repo is not a git repository`, `target repo has uncommitted changes...`, or anything unrecognized) → print its contents and **STOP immediately**; `/goal` remains the full reset path for these.
 - Read `.council/config.json`. Resolve **TARGET** = `target_repo`; if it is `"."`, TARGET is this project directory. **All code changes and commits happen in TARGET.**
 - Verify TARGET is a git repository (`git -C <TARGET> rev-parse --git-dir`). If not → write `stop.flag` = `target_repo is not a git repository`, print it, STOP.
 - **First cycle only** (history empty or missing): if `git -C <TARGET> status --porcelain` shows uncommitted changes, write `stop.flag` = `target repo has uncommitted changes — commit or stash them first`, print it, STOP. (Skip this on later cycles — a deferred cycle intentionally leaves work in the tree; this guard exists so `git add -A` never sweeps the user's own pre-existing work into a council commit.)

@@ -134,7 +134,8 @@ Everything else just works from wherever the folder sits.
 - **The `/goal` or `/loop` commands aren't recognized?** Close the window and reopen it
   using the Desktop icon (that's what loads the commands).
 - **It stopped sooner than expected?** It probably hit `max_cycles` or `max_minutes`. Raise
-  them in `.council\config.json` and run `/loop /council-cycle` again.
+  them in `.council\config.json` and run `/loop /council-cycle` again — as long as there's
+  now headroom, it clears the stop on its own and keeps going (no need to `/goal` again).
 - **It stopped right away saying the project has uncommitted changes?** That's a safety
   check — it won't start while you have unsaved work in the target project, so its
   auto-saves can't mix with yours. Commit (or stash) your changes there, then run it again.
