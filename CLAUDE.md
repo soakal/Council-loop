@@ -36,6 +36,7 @@ commands, subagents, `/loop`) — **no direct Anthropic API calls, no per-token 
 
 - **`target_repo`** is where all edits and commits land. `"."` means *this* project directory (self-hosting / demo); for real work point it at another repo's absolute path.
 - **Ceiling replaces the old cost cap:** the cycle stops at `max_cycles` OR `max_minutes`, whichever comes first — this is the subscription-model equivalent of the PowerShell dollar ceiling.
+- **Pre-run guards:** `target_repo` must be a git repository, and on the first cycle its working tree must be clean — so `git add -A` never sweeps the user's own uncommitted work into a council commit. Either failure writes `stop.flag`.
 - **One step per cycle.** The Engineer must not scope-creep; the Realist defaults to `REVISE` when unsure.
 - **`/council-cycle` must never loop itself** — `/loop` owns iteration. Each invocation does exactly one cycle and exits.
 - **Commit only on ACCEPT**, using `<commit_prefix> cycle <n>: <summary>` in `target_repo`.

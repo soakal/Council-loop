@@ -69,6 +69,10 @@ The cycle stops when **either** limit is reached, writing `.council/state/stop.f
 To run the council against a repo you don't have locally: clone it, set `target_repo` to
 its path. The council commits into **that** repo's history.
 
+Two safety guards run before the first cycle: the target must be a **git repository**, and
+its working tree must be **clean** (commit or stash your own work first) — otherwise the
+council's auto-commit could sweep your uncommitted changes into its commits.
+
 > **Tip:** give `target_repo` a proper `.gitignore`. As a safety net the commit step
 > already skips common regenerable artifacts (`__pycache__/`, `node_modules/`, `dist/`,
 > `.venv/`, `*.log`, …) and warns you to gitignore them — but the target's own

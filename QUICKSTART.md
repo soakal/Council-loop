@@ -135,5 +135,8 @@ Everything else just works from wherever the folder sits.
   using the Desktop icon (that's what loads the commands).
 - **It stopped sooner than expected?** It probably hit `max_cycles` or `max_minutes`. Raise
   them in `.council\config.json` and run `/loop /council-cycle` again.
+- **It stopped right away saying the project has uncommitted changes?** That's a safety
+  check — it won't start while you have unsaved work in the target project, so its
+  auto-saves can't mix with yours. Commit (or stash) your changes there, then run it again.
 - **Moved the `Council loop` folder?** The Desktop icon points at the old spot — just make a
   new shortcut to `start-council.cmd` in the new location.
