@@ -11,6 +11,10 @@ Arbiter (Opus)  →  Engineer (Sonnet)  →  Realist (Sonnet)  →  commit on AC
    plan               implement             review/critique
 ```
 
+> **New here? Read [QUICKSTART.md](QUICKSTART.md)** — plain-English setup, a double-click
+> launcher (`start-council.cmd`), and a `set-target.ps1` helper. The rest of this file is
+> the fuller reference.
+
 ## Quick start
 
 1. **Point it at a repo.** Edit `.council/config.json` → set `target_repo` to the
