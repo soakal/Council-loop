@@ -42,7 +42,8 @@ Launch the **realist** subagent (model override: `config.models.realist`) with t
   1. Inspect what would be staged: `git -C <TARGET> status --porcelain`.
   2. **Artifact guard.** Identify any changed paths matching common regenerable-artifact patterns that are NOT already gitignored by TARGET:
      `__pycache__/`, `*.pyc`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `node_modules/`, `.venv/`, `venv/`, `dist/`, `build/`, `target/`, `*.class`, `*.o`, `*.log`, `.DS_Store`, `Thumbs.db`, `*.tmp`.
-     - If any are present: stage everything **except** those (e.g. `git -C <TARGET> add -A` then `git -C <TARGET> reset -- <artifact paths>`, or add only the real deliverable paths). Print a one-line **WARNING** listing the skipped artifacts and recommend adding them to TARGET's `.gitignore`.
+     - **Tracked-path exemption:** before skipping a matched path, check `git -C <TARGET> ls-files -- <path>`. Non-empty output means the path is already tracked (a real, intentionally-committed file that merely matches an artifact pattern) — commit it normally, do not skip it. Only matched paths with **empty** `ls-files` output (untracked) get skipped + warned.
+     - If any untracked matches remain after the exemption: stage everything **except** those (e.g. `git -C <TARGET> add -A` then `git -C <TARGET> reset -- <artifact paths>`, or add only the real deliverable paths). Print a one-line **WARNING** listing the skipped artifacts and recommend adding them to TARGET's `.gitignore`.
      - If none: `git -C <TARGET> add -A`.
   3. Commit: `git -C <TARGET> commit -m "<commit_prefix> cycle <next_cycle>: <short step summary>"`.
   4. Capture the SHA: `git -C <TARGET> rev-parse --short HEAD`.

@@ -80,9 +80,10 @@ its working tree must be **clean** (commit or stash your own work first) — oth
 council's auto-commit could sweep your uncommitted changes into its commits.
 
 > **Tip:** give `target_repo` a proper `.gitignore`. As a safety net the commit step
-> already skips common regenerable artifacts (`__pycache__/`, `node_modules/`, `dist/`,
-> `.venv/`, `*.log`, …) and warns you to gitignore them — but the target's own
-> `.gitignore` is the real fix.
+> skips **untracked** paths matching common regenerable-artifact patterns
+> (`__pycache__/`, `node_modules/`, `dist/`, `.venv/`, `*.log`, …) and warns you to
+> gitignore them — already-tracked paths that happen to match are committed normally —
+> but the target's own `.gitignore` is the real fix.
 
 ## Portability
 
