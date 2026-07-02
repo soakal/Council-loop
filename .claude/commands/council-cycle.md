@@ -14,7 +14,7 @@ Paths below are relative to this Council Loop project directory.
   - **Any other reason** (`user requested stop`, `goal complete`, `no goal set`, `target_repo is not a git repository`, `target repo has uncommitted changes...`, or anything unrecognized) → print its contents and **STOP immediately**; `/goal` remains the full reset path for these.
 - Read `.council/config.json`. Resolve **TARGET** = `target_repo`; if it is `"."`, TARGET is this project directory. **All code changes and commits happen in TARGET.**
 - Verify TARGET is a git repository (`git -C <TARGET> rev-parse --git-dir`). If not → write `stop.flag` = `target_repo is not a git repository`, print it, STOP.
-- **First cycle only** (history empty or missing): if `git -C <TARGET> status --porcelain` shows uncommitted changes, write `stop.flag` = `target repo has uncommitted changes — commit or stash them first`, print it, STOP. (Skip this on later cycles — a deferred cycle intentionally leaves work in the tree; this guard exists so `git add -A` never sweeps the user's own pre-existing work into a council commit.)
+- **First cycle only** (history empty or missing): if `git -C <TARGET> status --porcelain` shows uncommitted changes, write `stop.flag` = `target repo has uncommitted changes — commit or stash them first`, print it, STOP. (Skip this on later cycles — deferred cycles revert their own residue (§5), so any uncommitted changes found later are either staged-but-uncommitted work from an ACCEPT under `auto_commit:false` or otherwise expected; this guard exists so `git add -A` never sweeps the user's own pre-existing work into a council commit.)
 - If `.council/state/goal.md` is missing → tell the user to run `/goal` first, write `.council/state/stop.flag` containing `no goal set`, and STOP.
 - Read `.council/state/goal.md` (objective, acceptance criteria, `started_at`) and the last ~10 lines of `.council/state/history.jsonl` (treat a missing file as empty history).
 
@@ -53,7 +53,7 @@ Launch the **realist** subagent (model override: `config.models.realist`) with t
   2. Stage the real deliverable paths only (`git -C <TARGET> add -A` then `reset` the artifact paths, same as the `true` branch) — skip the `git commit` and SHA-capture steps entirely.
   - If, after the guard, there is nothing real to stage, treat the cycle as `deferred` with note `no changes produced`.
   - Record this outcome in history (§6) with `"commit": null` and note `auto_commit off — staged, not committed`.
-- On `deferred`: do not commit (and, for the `false` branch, do not stage); leave the working tree as-is for the next cycle.
+- On `deferred`: do not commit (and, for the `false` branch, do not stage). Revert the Engineer's residue so the tree is clean for the next cycle: take the CHANGED paths reported by every engineer invocation this cycle (initial + any revise attempts), de-duplicated. For each path, check `git -C <TARGET> ls-files -- <path>`: non-empty → `git -C <TARGET> restore --worktree -- <path>` (restores from the index, so staged-but-uncommitted work from an earlier ACCEPT under `auto_commit:false` is untouched); empty → the Engineer created it as a new untracked file, so delete it directly (e.g. `rm -f -- <path>`). Never use `git checkout -- .` or `git clean -fd` — both would destroy unrelated staged-but-uncommitted work.
 
 ## 6. Record + report
 - Append exactly one JSON line to `.council/state/history.jsonl`:
