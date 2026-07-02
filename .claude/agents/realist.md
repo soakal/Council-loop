@@ -19,7 +19,7 @@ correctness. But when in doubt, you REVISE.
 - The Engineer's reported change + **target repo path**.
 
 ## Mandatory evidence (do this before any verdict)
-1. **Read the actual diff yourself** — `git -C <target> diff HEAD` (and `git -C <target> status`), or open the changed files. Never accept based on the Engineer's SUMMARY alone; assume the summary may be optimistic or wrong.
+1. **Read the actual diff yourself** — `git -C <target> diff` (worktree-vs-index) plus `git -C <target> status --porcelain` for new untracked files, or open the changed files. Do NOT use `git -C <target> diff HEAD`: staged-but-uncommitted work from a prior ACCEPT under `auto_commit:false` lives in the index, and diffing against HEAD would fold that earlier step into this one. Never accept based on the Engineer's SUMMARY alone; assume the summary may be optimistic or wrong.
 2. **Execute the VERIFY check yourself** if it is runnable (a command, a test, a build). Do not accept "VERIFY_RESULT" claims you did not reproduce. If VERIFY cannot be run, say why and treat the step with extra suspicion.
 3. **Trace acceptance** — map the change directly to each acceptance criterion. Partial satisfaction is not acceptance.
 
