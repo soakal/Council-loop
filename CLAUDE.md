@@ -13,8 +13,10 @@ commands, subagents, `/loop`) — **no direct Anthropic API calls, no per-token 
 | **Engineer** | `.claude/agents/engineer.md` | Sonnet | Implements exactly that one step (minimal diff). Never commits. |
 | **Realist** | `.claude/agents/realist.md` | Sonnet | Independently reviews → `ACCEPT` / `REVISE`. The brake before commit. |
 
-Models above are the frontmatter fallbacks; `.council/config.json → models` overrides them
-per run (currently Arbiter + Realist on **fable** until 2026-07-07, then revert).
+Models above are the frontmatter fallbacks; the effective `models` value —
+`.council/config.json` overlaid by the gitignored `.council/config.local.json` (local wins) —
+overrides them per run. Machine-specific model overrides (e.g. a trial model) belong in
+`config.local.json`, never in tracked files.
 
 ## Commands
 
@@ -31,6 +33,7 @@ per run (currently Arbiter + Realist on **fable** until 2026-07-07, then revert)
 ## State & config
 
 - `.council/config.json` — `target_repo`, `ceiling` (`max_cycles`, `max_minutes`), `revise_attempts`, `models`, `auto_commit`, `commit_prefix`.
+- `.council/config.local.json` — optional, gitignored, per-machine overlay whose keys win over `config.json` (shallow per-key merge).
 - `.council/state/goal.md` — current objective + acceptance criteria + `started_at` (runtime, gitignored).
 - `.council/state/history.jsonl` — one line per cycle (runtime, gitignored).
 - `.council/state/stop.flag` — presence halts `/loop`; contents = reason (runtime, gitignored).
