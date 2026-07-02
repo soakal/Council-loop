@@ -3,7 +3,7 @@ description: Show the council's current goal, cycle count, ceiling, and recent h
 allowed-tools: Read, Bash
 ---
 
-Report council status concisely. Read `.council/config.json` for `target_repo` and ceilings.
+Report council status concisely. Read `.council/config.json` for `target_repo` and ceilings; if `.council/config.local.json` exists, overlay its keys on top (**local wins**, shallow per-key merge — a partial local file like `{"target_repo": "..."}` only overrides that one key; nested objects such as `models` are overridden as a whole value, not deep-merged) before resolving the effective values below.
 
 - If `.council/state/goal.md` is missing → print `No goal set. Run /goal <objective>. Acceptance: <criteria> to begin.` and stop.
 - Otherwise show:

@@ -85,7 +85,10 @@ The two limits are your **safety brake** — whichever is reached first, it stop
 very first real job, try a small `max_cycles` (like `3`) so you can watch it before trusting
 it with more.
 
-*(You can change `target_repo` the easy way with `.\set-target.ps1` — see setup above.)*
+*(You can change `target_repo` the easy way with `.\set-target.ps1` — see setup above. That
+helper actually writes to a separate, per-machine `.council\config.local.json` file, which
+quietly overrides `target_repo` from `config.json` — so you never need to hand-edit
+`config.json` just to point at a different project.)*
 
 ---
 

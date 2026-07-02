@@ -71,6 +71,7 @@ and the git-safety guards are still hard stops — `/goal` is the full reset pat
 | `models` | Which model each role uses (`fable` / `opus` / `sonnet` / `haiku`) — passed as a model override when each subagent is launched; the frontmatter in `.claude/agents/*.md` is the fallback. |
 | `auto_commit` | On ACCEPT: `true` runs the artifact guard, stages, and commits. `false` runs the same artifact guard and stages the changes but does not commit — history records `"commit": null`. |
 | `commit_prefix` | Prefix for council commit messages (default `council:`). |
+| `config.local.json` | Optional, gitignored, per-machine override file living beside `config.json` (`.council/config.local.json`). Any keys it sets win over `config.json` (shallow per-key merge — partial files like `{"target_repo": "..."}` are fine). `set-target.ps1` writes to this file instead of the tracked `config.json`. |
 
 To run the council against a repo you don't have locally: clone it, set `target_repo` to
 its path. The council commits into **that** repo's history.
