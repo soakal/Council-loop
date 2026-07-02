@@ -47,7 +47,12 @@ Launch the **realist** subagent (model override: `config.models.realist`) with t
   3. Commit: `git -C <TARGET> commit -m "<commit_prefix> cycle <next_cycle>: <short step summary>"`.
   4. Capture the SHA: `git -C <TARGET> rev-parse --short HEAD`.
   - If, after the guard, there is nothing real to commit, treat the cycle as `deferred` with note `no changes produced`.
-- On `deferred`: do not commit; leave the working tree as-is for the next cycle.
+- If the verdict is `accept` and `config.auto_commit` is false, stage but do **not** commit:
+  1. Run the same **artifact guard** as above (step 5.2) against `git -C <TARGET> status --porcelain`, so regenerable artifacts never get staged either.
+  2. Stage the real deliverable paths only (`git -C <TARGET> add -A` then `reset` the artifact paths, same as the `true` branch) — skip the `git commit` and SHA-capture steps entirely.
+  - If, after the guard, there is nothing real to stage, treat the cycle as `deferred` with note `no changes produced`.
+  - Record this outcome in history (§6) with `"commit": null` and note `auto_commit off — staged, not committed`.
+- On `deferred`: do not commit (and, for the `false` branch, do not stage); leave the working tree as-is for the next cycle.
 
 ## 6. Record + report
 - Append exactly one JSON line to `.council/state/history.jsonl`:
