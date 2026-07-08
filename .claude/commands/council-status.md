@@ -9,7 +9,7 @@ Report council status concisely. Read `.council/config.json` for `target_repo` a
 - Otherwise show:
   - **Objective** and **acceptance criteria** (from `goal.md`).
   - **Target repo** (from config; `.` = this project).
-  - **Cycles:** `<cycles_done> / <max_cycles>` (cycles_done = line count of `.council/state/history.jsonl`, 0 if missing).
+  - **Cycles:** `<cycles_done> / <max_cycles>` (cycles_done = count of valid JSON object lines in `.council/state/history.jsonl`, 0 if missing; ignore blank/invalid lines and warn briefly if invalid lines exist).
   - **Elapsed:** `<minutes> / <max_minutes>` (now − `started_at`).
   - **Loop state:** if `.council/state/stop.flag` exists, print `STOPPED — <reason>`; else `armed/running`.
   - **Recent history:** the last 5 lines of `history.jsonl`, each as `#<cycle> <verdict> <commit> — <step>`.

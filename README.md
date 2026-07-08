@@ -17,16 +17,20 @@ Arbiter (Opus)  →  Engineer (Sonnet)  →  Realist (Sonnet)  →  commit on AC
 
 ## Quick start
 
-1. **Point it at a repo.** Easiest — from a PowerShell window in this folder:
+1. **Point it at a repo.** Easiest — from a shell in this folder:
    ```powershell
    .\set-target.ps1 "C:\path\to\your\repo"
+   ```
+   ```bash
+   ./set-target.sh "/path/to/your/repo"
    ```
    (Or edit `.council/config.json` → `target_repo` by hand. Leave it as `"."` to have the
    council operate on this folder itself — handy for a first test.)
 
 2. **Launch it.** Double-click the **`Council Loop`** Desktop shortcut (or
-   `start-council.cmd` in this folder) to open Claude Code here, so the commands load.
-   From a terminal instead: `cd` into this folder and run `claude`.
+   `start-council.cmd` in this folder) on Windows, or run `./start-council.sh` on
+   Linux/macOS, to open Claude Code here so the commands load. From a terminal instead:
+   `cd` into this folder and run `claude`.
 
 3. **Set a goal:**
    ```
@@ -71,7 +75,13 @@ and the git-safety guards are still hard stops — `/goal` is the full reset pat
 | `models` | Which model each role uses (`fable` / `opus` / `sonnet` / `haiku`) — passed as a model override when each subagent is launched; the frontmatter in `.claude/agents/*.md` is the fallback. |
 | `auto_commit` | On ACCEPT: `true` runs the artifact guard, stages, and commits. `false` runs the same artifact guard and stages the changes but does not commit — history records `"commit": null`. |
 | `commit_prefix` | Prefix for council commit messages (default `council:`). |
-| `config.local.json` | Optional, gitignored, per-machine override file living beside `config.json` (`.council/config.local.json`). Any keys it sets win over `config.json` (shallow per-key merge — partial files like `{"target_repo": "..."}` are fine). `set-target.ps1` writes to this file instead of the tracked `config.json`. |
+| `config.local.json` | Optional, gitignored, per-machine override file living beside `config.json` (`.council/config.local.json`). Any keys it sets win over `config.json` (shallow per-key merge — partial files like `{"target_repo": "..."}` are fine). `set-target.ps1` and `set-target.sh` write to this file instead of the tracked `config.json`. |
+
+Because the merge is shallow, override complete nested objects when using
+`config.local.json`. For example, use
+`{"ceiling": {"max_cycles": 20, "max_minutes": 60}}`, not only
+`{"ceiling": {"max_cycles": 20}}`, or the local `ceiling` value will replace the whole
+base `ceiling` object.
 
 To run the council against a repo you don't have locally: clone it, set `target_repo` to
 its path. The council commits into **that** repo's history.
@@ -95,7 +105,7 @@ regenerated per run.
 
 ### Running it on another PC
 
-Move the tool to any Windows machine by **copying the whole `Council loop` folder**, or by
+Move the tool to another machine by **copying the whole `Council loop` folder**, or by
 cloning it fresh:
 
 ```
@@ -105,11 +115,12 @@ git clone https://github.com/soakal/Council-loop
 Then on that machine:
 
 1. **Install Claude Code** — the one hard requirement (the loop runs on it).
-2. **Set `target_repo` locally:** `.\set-target.ps1 "C:\path\on\this\pc\to\project"` (an
-   absolute path from the old PC won't exist here; use a real one or `"."`).
-3. **Recreate the Desktop shortcut** — the `.lnk` stores the old machine's path and doesn't
-   travel. Just double-click `start-council.cmd`, or right-click it → *Send to → Desktop
-   (create shortcut)*.
+2. **Set `target_repo` locally:** `.\set-target.ps1 "C:\path\on\this\pc\to\project"` on
+   Windows, or `./set-target.sh "/path/on/this/machine/to/project"` on Linux/macOS. An
+   absolute path from the old machine won't exist here; use a real one or `"."`.
+3. **Launch from the moved folder.** On Windows, recreate the Desktop shortcut if you use
+   one — the `.lnk` stores the old machine's path and doesn't travel. You can always run
+   `start-council.cmd` or `./start-council.sh` directly from this folder.
 
 The `.claude/` commands + agents, `.council/config.json`, launcher, and helper all resolve
 paths from their own location, so nothing else needs editing.
@@ -128,10 +139,14 @@ paths from their own location, so nothing else needs editing.
 .council/
   config.json · config.example.json
   state/     # goal.md · history.jsonl · stop.flag  (runtime, gitignored)
+scripts/
+  validate.sh        # lightweight repository smoke checks
 CLAUDE.md          # project memory / rules for the loop
 QUICKSTART.md      # plain-English getting-started guide
 start-council.cmd  # double-click launcher (opens Claude Code in this folder)
+start-council.sh   # Unix launcher equivalent
 set-target.ps1     # set target_repo without hand-editing JSON
+set-target.sh      # Unix target_repo helper equivalent
 ```
 
 ## Skill authoring mid-run

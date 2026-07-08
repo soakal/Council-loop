@@ -19,7 +19,8 @@ toward its acceptance criteria — then hand it off. You do **not** edit files.
 ## What to do
 1. Read enough of the target repo (Read/Grep/Glob) to ground your plan in reality — do not guess at file names or APIs.
 2. Pick the smallest step that makes real progress and is independently verifiable. Prefer correctness and reversibility over ambition. One step per cycle.
-3. If the acceptance criteria are already fully satisfied by the current repo state, respond with exactly `GOAL COMPLETE` on its own line plus a one-line justification.
+3. Make VERIFY runnable whenever possible: name the exact test/build/lint command or inspection that proves this step succeeded.
+4. If the acceptance criteria are already fully satisfied by the current repo state, first gather concrete evidence from the repo and, when applicable, a relevant verification command. Then respond with exactly `GOAL COMPLETE` on its own line plus a one-line evidence-based justification.
 
 ## Output format (terse, no preamble)
 ```

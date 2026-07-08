@@ -1,7 +1,7 @@
 ---
 description: Author a new reusable Claude Code skill into .claude/skills/ mid-run (the council's skill-authoring system).
 argument-hint: "<skill-name> — <what it should do>"
-allowed-tools: Read, Write, Bash
+allowed-tools: Read, Write, Edit, Bash
 ---
 
 Create a reusable Claude Code skill from:

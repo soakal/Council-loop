@@ -8,11 +8,13 @@ REM  lives (uses this script's own location).
 REM ============================================================
 
 cd /d "%~dp0"
+set "TARGET_REPO="
+for /f "usebackq delims=" %%T in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$cfg = Join-Path $PWD '.council\config.json'; $localPath = Join-Path $PWD '.council\config.local.json'; $target = $null; $source = 'config.json'; try { $base = Get-Content $cfg -Raw | ConvertFrom-Json; $target = $base.target_repo } catch { $target = '<could not read config.json>' }; if (Test-Path $localPath) { try { $local = Get-Content $localPath -Raw | ConvertFrom-Json; if ($local.PSObject.Properties.Name -contains 'target_repo') { $target = $local.target_repo; $source = 'config.local.json' } } catch { $target = '<could not read config.local.json>'; $source = 'config.local.json' } }; Write-Output ($target + '  (from ' + $source + ')')"`) do set "TARGET_REPO=%%T"
 echo.
 echo   Council Loop
 echo   ------------
 echo   Folder : %CD%
-echo   Target : (see .council\config.json  -^>  target_repo)
+echo   Target : %TARGET_REPO%
 echo.
 echo   Next:  /goal ^<objective^>. Acceptance: ^<criteria^>
 echo          /loop /council-cycle

@@ -67,6 +67,11 @@ $normalized = $Path.Trim().Replace('\', '/')
 
 if ($normalized -ne '.' -and -not (Test-Path $Path)) {
   Write-Warning "That path doesn't exist yet: $Path  (setting it anyway)"
+} elseif ($normalized -ne '.') {
+  git -C $Path rev-parse --git-dir *> $null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning "That target is not a git repository yet: $Path"
+  }
 }
 
 # Load (or start) the local override object, then set/overwrite target_repo.

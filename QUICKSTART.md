@@ -13,7 +13,8 @@ your Claude Code subscription, so there are **no extra bills**.
 
 ## ⚡ The short version
 
-1. **Double-click the `Council Loop` icon on your Desktop.**
+1. **Open Council Loop**: double-click the `Council Loop` icon on Windows, or run
+   `./start-council.sh` on Linux/macOS.
 2. Type your job:
    `/goal <what you want>. Acceptance: <how you'll know it's done>`
 3. Type: `/loop /council-cycle` and let it work.
@@ -24,13 +25,18 @@ That's the whole thing. The rest of this page just explains each part.
 
 ## 🔧 First-time setup (do this once)
 
-**Tell it which project to work on.** Open a PowerShell window in this folder and run:
+**Tell it which project to work on.** Open a shell in this folder and run one of these:
 
 ```powershell
 .\set-target.ps1 "C:\path\to\your\project"
 ```
 
-- Run `.\set-target.ps1` with nothing after it to see what's currently set.
+```bash
+./set-target.sh "/path/to/your/project"
+```
+
+- Run `.\set-target.ps1` or `./set-target.sh` with nothing after it to see what's currently
+  set.
 - Not sure yet? Leave it as-is — by default it works inside *this* folder, which is fine
   for a first test.
 
@@ -41,7 +47,8 @@ That's the whole thing. The rest of this page just explains each part.
 ## ▶️ Running it (3 steps)
 
 ### Step 1 — Open it
-**Double-click the `Council Loop` icon on your Desktop.** A window opens, ready to go.
+**Open Council Loop from this folder.** On Windows, double-click the `Council Loop` icon or
+`start-council.cmd`. On Linux/macOS, run `./start-council.sh`. A window opens, ready to go.
 
 ### Step 2 — Tell it the job
 Type a goal. Always include an **"Acceptance:"** part — that's how it knows when to stop:
@@ -85,10 +92,14 @@ The two limits are your **safety brake** — whichever is reached first, it stop
 very first real job, try a small `max_cycles` (like `3`) so you can watch it before trusting
 it with more.
 
-*(You can change `target_repo` the easy way with `.\set-target.ps1` — see setup above. That
-helper actually writes to a separate, per-machine `.council\config.local.json` file, which
-quietly overrides `target_repo` from `config.json` — so you never need to hand-edit
-`config.json` just to point at a different project.)*
+*(You can change `target_repo` the easy way with `.\set-target.ps1` or `./set-target.sh` —
+see setup above. Those helpers write to a separate, per-machine
+`.council\config.local.json` file, which quietly overrides `target_repo` from `config.json`
+— so you never need to hand-edit `config.json` just to point at a different project.)*
+
+**Advanced note:** local overrides are shallow. If you put a nested setting in
+`.council\config.local.json`, include the whole nested object. For example:
+`{"ceiling": {"max_cycles": 20, "max_minutes": 60}}`.
 
 ---
 
@@ -105,7 +116,7 @@ quietly overrides `target_repo` from `config.json` — so you never need to hand
 
 ## 💻 Running it on another PC
 
-You can move Council Loop to any Windows PC. Two ways to get it there:
+You can move Council Loop to another machine. Two ways to get it there:
 
 - **Copy the whole `Council loop` folder** (USB, network, or cloud drive), **or**
 - On the new PC, download it fresh:
@@ -114,14 +125,15 @@ You can move Council Loop to any Windows PC. Two ways to get it there:
   ```
   (This way you can grab future updates later with `git pull`.)
 
-Then, on that PC, do three quick things:
+Then, on that machine, do three quick things:
 
 1. **Make sure Claude Code is installed** there — that's the one real requirement.
-2. **Point it at a project on that PC:** `.\set-target.ps1 "C:\a\folder\on\this\pc"`
-   (a path from your old PC won't exist here, so set a real one — or leave it as `"."`).
-3. **Make a new Desktop shortcut** — the old one remembers the old PC's location. Easiest:
-   just double-click `start-council.cmd` inside the folder. (Or right-click it →
-   *Send to → Desktop (create shortcut)*.)
+2. **Point it at a project on that machine:** `.\set-target.ps1 "C:\a\folder\on\this\pc"`
+   on Windows, or `./set-target.sh "/a/folder/on/this/machine"` on Linux/macOS. A path
+   from your old machine won't exist here, so set a real one — or leave it as `"."`.
+3. **Open it from the moved folder.** On Windows, make a new Desktop shortcut if you want
+   one; the old shortcut remembers the old PC's location. You can always run
+   `start-council.cmd` or `./start-council.sh` directly.
 
 Everything else just works from wherever the folder sits.
 
@@ -135,7 +147,7 @@ Everything else just works from wherever the folder sits.
 ## 🆘 If something seems off
 
 - **The `/goal` or `/loop` commands aren't recognized?** Close the window and reopen it
-  using the Desktop icon (that's what loads the commands).
+  from this folder using the launcher script (that's what loads the commands).
 - **It stopped sooner than expected?** It probably hit `max_cycles` or `max_minutes`. Raise
   them in `.council\config.json` and run `/loop /council-cycle` again — as long as there's
   now headroom, it clears the stop on its own and keeps going (no need to `/goal` again).

@@ -10,16 +10,17 @@ Paths below are relative to this Council Loop project directory.
 
 ## 0. Preflight
 - If `.council/state/stop.flag` exists, classify its contents:
-  - **Ceiling reason** (`max_cycles reached (N)` or `max_minutes reached`): count lines in `.council/state/history.jsonl` as `cycles_done` (0 if missing). If `cycles_done < ceiling.max_cycles` (headroom remains) → delete `stop.flag`, set `started_at` in `.council/state/goal.md` to now (fresh minutes window), print a one-line `resuming — ceiling had headroom (cycles_done/max_cycles)` note, and continue preflight below. Otherwise (no headroom) → print the flag's contents and **STOP immediately**.
+  - **Ceiling reason** (`max_cycles reached (N)` or `max_minutes reached`): count valid JSON object lines in `.council/state/history.jsonl` as `cycles_done` (0 if missing; ignore blank/invalid lines but warn once if any invalid lines are present). If `cycles_done < ceiling.max_cycles` (headroom remains) → delete `stop.flag`, set `started_at` in `.council/state/goal.md` to now (fresh minutes window), print a one-line `resuming — ceiling had headroom (cycles_done/max_cycles)` note, and continue preflight below. Otherwise (no headroom) → print the flag's contents and **STOP immediately**.
   - **Any other reason** (`user requested stop`, `goal complete`, `no goal set`, `target_repo is not a git repository`, `target repo has uncommitted changes...`, or anything unrecognized) → print its contents and **STOP immediately**; `/goal` remains the full reset path for these.
 - Read `.council/config.json`; if `.council/config.local.json` exists, overlay its keys on top (**local wins**, shallow per-key merge — a partial local file like `{"target_repo": "..."}` only overrides that one key; nested objects such as `models` are overridden as a whole value, not deep-merged). Resolve **TARGET** = the effective `target_repo`; if it is `"."`, TARGET is this project directory. **All code changes and commits happen in TARGET.**
+- Validate the effective config before continuing. Required keys: `target_repo`, `ceiling.max_cycles`, `ceiling.max_minutes`, `revise_attempts`, `models.arbiter`, `models.engineer`, `models.realist`, `auto_commit`, and `commit_prefix`. If any are missing or malformed, write `stop.flag` = `invalid council config: <brief reason>`, print it, and STOP.
 - Verify TARGET is a git repository (`git -C <TARGET> rev-parse --git-dir`). If not → write `stop.flag` = `target_repo is not a git repository`, print it, STOP.
 - **First cycle only** (history empty or missing): if `git -C <TARGET> status --porcelain` shows uncommitted changes, write `stop.flag` = `target repo has uncommitted changes — commit or stash them first`, print it, STOP. (Skip this on later cycles — deferred cycles revert their own residue (§5), so any uncommitted changes found later are either staged-but-uncommitted work from an ACCEPT under `auto_commit:false` or otherwise expected; this guard exists so `git add -A` never sweeps the user's own pre-existing work into a council commit.)
 - If `.council/state/goal.md` is missing → tell the user to run `/goal` first, write `.council/state/stop.flag` containing `no goal set`, and STOP.
 - Read `.council/state/goal.md` (objective, acceptance criteria, `started_at`) and the last ~10 lines of `.council/state/history.jsonl` (treat a missing file as empty history).
 
 ## 1. Ceiling check
-- `cycles_done` = number of lines in `history.jsonl` (0 if missing).
+- `cycles_done` = number of valid JSON object lines in `history.jsonl` (0 if missing; ignore blank/invalid lines but warn once if any invalid lines are present).
 - If `cycles_done >= ceiling.max_cycles` → write `stop.flag` = `max_cycles reached (N)`, print it, STOP.
 - Compute `elapsed_min` = now − `started_at` (Bash: `date -u +%s` vs the stored timestamp).
 - If `elapsed_min >= ceiling.max_minutes` → write `stop.flag` = `max_minutes reached`, print it, STOP.
@@ -27,7 +28,7 @@ Paths below are relative to this Council Loop project directory.
 
 ## 2. Arbiter — plan (subagent `arbiter`)
 Launch the **arbiter** subagent (Agent/Task tool), passing `config.models.arbiter` as the model override if set (the agent frontmatter is the fallback). Pass it: the objective + acceptance criteria, the TARGET path, and a short digest of prior cycles from history. Ask for the single next step in its STEP/WHY/FILES/VERIFY/RISK format.
-- If the arbiter replies `GOAL COMPLETE` → append a `"verdict":"complete"` history line, write `stop.flag` = `goal complete`, print a closing summary, STOP.
+- If the arbiter's first non-empty output line is exactly `GOAL COMPLETE` → append a `"verdict":"complete"` history line, write `stop.flag` = `goal complete`, print a closing summary, STOP. Do not treat incidental mentions of `GOAL COMPLETE` elsewhere as completion.
 
 ## 3. Engineer — implement (subagent `engineer`)
 Launch the **engineer** subagent (model override: `config.models.engineer`) with the arbiter's STEP and the TARGET path. It makes the minimal change and reports CHANGED/SUMMARY/VERIFY_RESULT/NOTES. It must not commit.
