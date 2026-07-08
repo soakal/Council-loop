@@ -46,7 +46,9 @@ Arbiter (Opus)  →  Engineer (Sonnet)  →  Realist (Sonnet)  →  commit on AC
    ceiling is hit or the goal is complete.
 
 5. **Check in any time:** `/council-status` — shows the goal, cycles used vs. the ceiling,
-   elapsed time, and recent history. Press `Esc` / `Ctrl-C` (or `/stop`) to halt early.
+   elapsed time, and recent history. Use `/stop` to halt cleanly at the next cycle
+   boundary; if you interrupt with `Esc` / `Ctrl-C`, check the target repo with
+   `git status` before resuming.
 
 ## The run ceiling (replaces the old dollar cap)
 
@@ -141,6 +143,7 @@ paths from their own location, so nothing else needs editing.
   state/     # goal.md · history.jsonl · stop.flag  (runtime, gitignored)
 scripts/
   validate.sh        # lightweight repository smoke checks
+  council_state.py   # deterministic config/history helper used by commands
 CLAUDE.md          # project memory / rules for the loop
 QUICKSTART.md      # plain-English getting-started guide
 start-council.cmd  # double-click launcher (opens Claude Code in this folder)

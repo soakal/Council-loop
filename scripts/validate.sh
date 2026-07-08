@@ -14,6 +14,7 @@ required_files=(
   "$repo_root/.claude/agents/arbiter.md"
   "$repo_root/.claude/agents/engineer.md"
   "$repo_root/.claude/agents/realist.md"
+  "$repo_root/scripts/council_state.py"
   "$repo_root/start-council.cmd"
   "$repo_root/start-council.sh"
   "$repo_root/set-target.ps1"
@@ -66,5 +67,23 @@ PY
 
 bash -n "$repo_root/set-target.sh"
 bash -n "$repo_root/start-council.sh"
+python3 -m py_compile "$repo_root/scripts/council_state.py"
+python3 "$repo_root/scripts/council_state.py" --root "$repo_root" effective-config >/dev/null
+
+tmp_root="$(mktemp -d)"
+trap 'rm -rf "$tmp_root"' EXIT
+mkdir -p "$tmp_root/.council/state"
+cp "$repo_root/.council/config.json" "$tmp_root/.council/config.json"
+python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" append-history \
+  --cycle 1 \
+  --step 'validate "quoted" history' \
+  --verdict accept \
+  --commit null \
+  --notes 'json escaping check'
+history_count="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" history-count)"
+if [[ "$history_count" != "1" ]]; then
+  echo "Expected temp history count 1, got: $history_count" >&2
+  exit 1
+fi
 
 echo "Validation passed."

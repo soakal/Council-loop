@@ -73,8 +73,11 @@ project. **It stops on its own** when the job is done or it hits a limit you set
 | To do this… | Type this |
 |---|---|
 | See how it's going | `/council-status` |
-| Stop it | press `Esc` (or type `/stop`) |
+| Stop it cleanly | `/stop` |
 | Do just one step, then pause | `/council-cycle` |
+
+If you interrupt with `Esc` or `Ctrl-C`, check the target project with `git status` before
+resuming so you do not carry partial work into the next cycle.
 
 ---
 
