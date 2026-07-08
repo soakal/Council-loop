@@ -14,7 +14,9 @@ required_files=(
   "$repo_root/.claude/agents/arbiter.md"
   "$repo_root/.claude/agents/engineer.md"
   "$repo_root/.claude/agents/realist.md"
+  "$repo_root/start-council.cmd"
   "$repo_root/start-council.sh"
+  "$repo_root/set-target.ps1"
   "$repo_root/set-target.sh"
 )
 

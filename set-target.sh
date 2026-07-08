@@ -52,7 +52,7 @@ if [[ "$target" == "." ]]; then
   normalized="."
 else
   # Store absolute Unix paths for portability between shells.
-  if [[ -e "$target" ]]; then
+  if [[ -d "$target" ]]; then
     normalized="$(cd -- "$target" && pwd)"
   elif [[ "$target" = /* ]]; then
     normalized="$target"
