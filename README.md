@@ -50,6 +50,9 @@ Arbiter (Opus)  →  Engineer (Sonnet)  →  Realist (Sonnet)  →  commit on AC
    boundary; if you interrupt with `Esc` / `Ctrl-C`, check the target repo with
    `git status` before resuming.
 
+6. **Diagnose setup:** `/council-doctor` checks config, target git state, tools, models,
+   history, and likely test commands before you start an unattended run.
+
 ## The run ceiling (replaces the old dollar cap)
 
 Instead of a per-token cost ceiling, runs are bounded by `.council/config.json → ceiling`:
@@ -75,6 +78,10 @@ and the git-safety guards are still hard stops — `/goal` is the full reset pat
 | `git_clone_url` | Optional — the repo's origin, for reference / cloning elsewhere. |
 | `revise_attempts` | How many Engineer↔Realist revision rounds before a step is deferred (default 2). |
 | `models` | Which model each role uses (`fable` / `opus` / `sonnet` / `haiku`) — passed as a model override when each subagent is launched; the frontmatter in `.claude/agents/*.md` is the fallback. |
+| `dry_run` | If `true`, the council plans/reviews without modifying, staging, committing, pushing, or opening PRs. |
+| `open_pr` | If `true`, accepted committed cycles print PR-ready handoff details for wrappers/users to open a PR. |
+| `transcripts` | If `true`, each cycle writes a readable transcript under `.council/state/transcripts/`. |
+| `test_commands` | Optional explicit verification commands. Leave empty to auto-discover common test commands. |
 | `auto_commit` | On ACCEPT: `true` runs the artifact guard, stages, and commits. `false` runs the same artifact guard and stages the changes but does not commit — history records `"commit": null`. |
 | `commit_prefix` | Prefix for council commit messages (default `council:`). |
 | `config.local.json` | Optional, gitignored, per-machine override file living beside `config.json` (`.council/config.local.json`). Any keys it sets win over `config.json` (shallow per-key merge — partial files like `{"target_repo": "..."}` are fine). `set-target.ps1` and `set-target.sh` write to this file instead of the tracked `config.json`. |
@@ -97,6 +104,14 @@ council's auto-commit could sweep your uncommitted changes into its commits.
 > (`__pycache__/`, `node_modules/`, `dist/`, `.venv/`, `*.log`, …) and warns you to
 > gitignore them — already-tracked paths that happen to match are committed normally —
 > but the target's own `.gitignore` is the real fix.
+
+## Reliability commands
+
+| Command | What it does |
+|---|---|
+| `/council-doctor` | Health-checks config, helper scripts, target repo, tool availability, history, models, and test discovery. |
+| `/council-repair [--apply]` | Diagnoses state issues; with `--apply`, backs up and rewrites malformed `history.jsonl` lines only. |
+| `/council-rollback <cycle|sha>` | Reverts a council-created commit after verifying the target repo is clean. |
 
 ## Portability
 
@@ -136,14 +151,17 @@ paths from their own location, so nothing else needs editing.
 ```
 .claude/
   agents/    arbiter.md · engineer.md · realist.md   # the three council roles
-  commands/  goal.md · council-cycle.md · council-status.md · forge-skill.md · stop.md
+  commands/  goal.md · council-cycle.md · council-status.md · council-doctor.md
+             council-repair.md · council-rollback.md · forge-skill.md · stop.md
   skills/    # reusable skills authored mid-run by /forge-skill
 .council/
-  config.json · config.example.json
-  state/     # goal.md · history.jsonl · stop.flag  (runtime, gitignored)
+  config.json · config.example.json · config.schema.json
+  state/     # goal.md · history.jsonl · stop.flag · transcripts/  (runtime, gitignored)
 scripts/
   validate.sh        # lightweight repository smoke checks
   council_state.py   # deterministic config/history helper used by commands
+  council_doctor.py  # command-line health checks
+  discover_tests.py  # common test command discovery
 CLAUDE.md          # project memory / rules for the loop
 QUICKSTART.md      # plain-English getting-started guide
 start-council.cmd  # double-click launcher (opens Claude Code in this folder)

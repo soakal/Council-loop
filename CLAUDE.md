@@ -25,6 +25,9 @@ overrides them per run. Machine-specific model overrides (e.g. a trial model) be
 | `/goal <objective>. Acceptance: <criteria>` | Sets the goal, resets cycle state. |
 | `/council-cycle` | Runs ONE cycle (Arbiter → Engineer → Realist → commit on accept). |
 | `/council-status` | Shows goal, cycles done vs ceiling, elapsed time, recent history. |
+| `/council-doctor` | Health-checks config, target repo, tools, models, state, and test discovery. |
+| `/council-repair [--apply]` | Diagnoses state issues; can safely back up and repair malformed history lines. |
+| `/council-rollback <cycle\|sha>` | Reverts a council-created commit after clean-tree checks. |
 | `/forge-skill <name> — <behavior>` | Authors a new reusable skill into `.claude/skills/` mid-run. |
 | `/stop [reason]` | Writes `stop.flag` so the loop halts cleanly at the next cycle boundary. |
 
@@ -32,10 +35,12 @@ overrides them per run. Machine-specific model overrides (e.g. a trial model) be
 
 ## State & config
 
-- `.council/config.json` — `target_repo`, `ceiling` (`max_cycles`, `max_minutes`), `revise_attempts`, `models`, `auto_commit`, `commit_prefix`.
+- `.council/config.json` — `target_repo`, `ceiling` (`max_cycles`, `max_minutes`), `revise_attempts`, `models`, `dry_run`, `open_pr`, `transcripts`, `test_commands`, `auto_commit`, `commit_prefix`.
+- `.council/config.schema.json` — JSON schema for editor help and config review.
 - `.council/config.local.json` — optional, gitignored, per-machine overlay whose keys win over `config.json` (shallow per-key merge).
 - `.council/state/goal.md` — current objective + acceptance criteria + `started_at` (runtime, gitignored).
 - `.council/state/history.jsonl` — one line per cycle (runtime, gitignored).
+- `.council/state/transcripts/` — optional readable cycle transcripts (runtime, gitignored).
 - `.council/state/stop.flag` — presence halts `/loop`; contents = reason (runtime, gitignored).
 
 ## Rules for the loop (important)

@@ -4,6 +4,10 @@
   "ceiling": { "max_cycles": 10, "max_minutes": 60 },
   "revise_attempts": 2,
   "models": { "arbiter": "opus", "engineer": "sonnet", "realist": "sonnet" },
+  "dry_run": false,
+  "open_pr": false,
+  "transcripts": true,
+  "test_commands": [],
   "auto_commit": true,
   "commit_prefix": "council:"
 }

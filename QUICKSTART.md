@@ -73,6 +73,9 @@ project. **It stops on its own** when the job is done or it hits a limit you set
 | To do this… | Type this |
 |---|---|
 | See how it's going | `/council-status` |
+| Check setup health | `/council-doctor` |
+| Diagnose/repair state | `/council-repair` |
+| Revert a council commit | `/council-rollback <cycle-or-sha>` |
 | Stop it cleanly | `/stop` |
 | Do just one step, then pause | `/council-cycle` |
 

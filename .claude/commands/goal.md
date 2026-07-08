@@ -25,5 +25,6 @@ Do this, then confirm:
    started_at: <timestamp>
    ```
 5. Truncate `.council/state/history.jsonl` to an empty file.
-6. Delete `.council/state/stop.flag` if it exists.
-7. Confirm back in 2–3 lines: the objective, the acceptance criteria, and that the loop is armed (`/loop /council-cycle` to run).
+6. Delete `.council/state/transcripts/` if it exists, then recreate the directory if transcripts are enabled later.
+7. Delete `.council/state/stop.flag` if it exists.
+8. Confirm back in 2–3 lines: the objective, the acceptance criteria, and that the loop is armed (`/loop /council-cycle` to run).

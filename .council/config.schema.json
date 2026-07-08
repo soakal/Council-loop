@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Council Loop configuration",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "target_repo",
+    "ceiling",
+    "revise_attempts",
+    "models",
+    "dry_run",
+    "open_pr",
+    "transcripts",
+    "test_commands",
+    "auto_commit",
+    "commit_prefix"
+  ],
+  "properties": {
+    "target_repo": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Absolute target repository path, or '.' for the Council Loop project directory."
+    },
+    "git_clone_url": {
+      "type": ["string", "null"],
+      "description": "Optional origin URL for reference."
+    },
+    "ceiling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_cycles", "max_minutes"],
+      "properties": {
+        "max_cycles": { "type": "integer", "minimum": 1 },
+        "max_minutes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "revise_attempts": { "type": "integer", "minimum": 0 },
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["arbiter", "engineer", "realist"],
+      "properties": {
+        "arbiter": { "$ref": "#/$defs/modelName" },
+        "engineer": { "$ref": "#/$defs/modelName" },
+        "realist": { "$ref": "#/$defs/modelName" }
+      }
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "When true, the council plans/reviews but must not modify, stage, commit, push, or open PRs."
+    },
+    "open_pr": {
+      "type": "boolean",
+      "description": "When true, accepted auto-commit cycles print a PR-ready handoff summary. Hosted PR creation requires an external wrapper or user action."
+    },
+    "transcripts": {
+      "type": "boolean",
+      "description": "When true, each cycle writes a readable transcript under .council/state/transcripts/."
+    },
+    "test_commands": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Optional explicit verification commands for the target repo. Empty means auto-discover."
+    },
+    "auto_commit": { "type": "boolean" },
+    "commit_prefix": { "type": "string" }
+  },
+  "$defs": {
+    "modelName": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._:-]+$",
+      "description": "Claude Code model alias or explicit model slug."
+    }
+  }
+}
