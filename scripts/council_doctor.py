@@ -54,6 +54,7 @@ def main() -> int:
         ".claude/commands/council-rollback.md",
         ".claude/agents/arbiter.md",
         ".claude/agents/engineer.md",
+        ".claude/agents/security.md",
         ".claude/agents/realist.md",
         "scripts/council_doctor.py",
         "scripts/council_state.py",

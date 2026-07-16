@@ -1,15 +1,25 @@
 # Council Loop
 
 A **portable, native Claude Code** autonomous coding loop — a re-implementation of the
-PowerShell `claude-council-loop`. A three-role council advances a goal one verifiable
+PowerShell `claude-council-loop`. A four-role council advances a goal one verifiable
 step at a time and auto-commits each accepted step. It runs entirely on Claude Code
 (custom commands + subagents + `/loop`), so there are **no direct API calls and no
 per-token billing** — it uses your Claude Code subscription.
 
 ```
-Arbiter (Opus)  →  Engineer (Sonnet)  →  Realist (Sonnet)  →  commit on ACCEPT
-   plan               implement             review/critique
+Arbiter (Opus) → Engineer (Sonnet) → Security (Sonnet) → Realist (Sonnet) → commit
+   plan             implement          audit + fix          review/critique
+                                          ↕
+                          dynamic specialist agents (parallel,
+                          per-cycle, spawned on request)
 ```
+
+Commits require **Security + all spawned dynamic agents + Realist** to sign off. The
+Security agent runs bandit/pip-audit where applicable plus an LLM vulnerability hunt,
+auto-fixes low-severity findings, and blocks the cycle on high-severity ones. Any
+permanent agent can ask the Arbiter to spawn temporary read-only specialists
+(db-schema, infra, crypto, …) that run in parallel with a per-agent timeout; every
+spawn is logged and shown in `/council-status`.
 
 > **New here? Read [QUICKSTART.md](QUICKSTART.md)** — plain-English setup with a
 > double-click Desktop shortcut, a `start-council.cmd` launcher, and a `set-target.ps1`
@@ -41,9 +51,11 @@ Arbiter (Opus)  →  Engineer (Sonnet)  →  Realist (Sonnet)  →  commit on AC
    ```
    /loop /council-cycle
    ```
-   Each cycle: Arbiter plans the next step → Engineer implements it → Realist reviews →
-   on ACCEPT the change is committed to `target_repo`. The loop stops on its own when the
-   ceiling is hit or the goal is complete.
+   Each cycle: Arbiter plans the next step → Engineer implements it → Security audits it
+   (auto-fixing low-severity findings, blocking on high) → any requested dynamic
+   specialists run in parallel → Realist reviews → on full sign-off the change is
+   committed to `target_repo`. The loop stops on its own when the ceiling is hit or the
+   goal is complete.
 
 5. **Check in any time:** `/council-status` — shows the goal, cycles used vs. the ceiling,
    elapsed time, and recent history. Use `/stop` to halt cleanly at the next cycle
@@ -150,7 +162,7 @@ paths from their own location, so nothing else needs editing.
 
 ```
 .claude/
-  agents/    arbiter.md · engineer.md · realist.md   # the three council roles
+  agents/    arbiter.md · engineer.md · security.md · realist.md   # the four council roles
   commands/  goal.md · council-cycle.md · council-status.md · council-doctor.md
              council-repair.md · council-rollback.md · forge-skill.md · stop.md
   skills/    # reusable skills authored mid-run by /forge-skill

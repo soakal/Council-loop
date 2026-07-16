@@ -1,13 +1,26 @@
 {
   "target_repo": ".",
   "git_clone_url": null,
-  "ceiling": { "max_cycles": 10, "max_minutes": 60 },
+  "ceiling": {
+    "max_cycles": 10,
+    "max_minutes": 60
+  },
   "revise_attempts": 2,
-  "models": { "arbiter": "opus", "engineer": "sonnet", "realist": "sonnet" },
+  "models": {
+    "arbiter": "opus",
+    "engineer": "sonnet",
+    "realist": "sonnet",
+    "security": "sonnet"
+  },
   "dry_run": false,
   "open_pr": false,
   "transcripts": true,
   "test_commands": [],
   "auto_commit": true,
-  "commit_prefix": "council:"
+  "commit_prefix": "council:",
+  "dynamic_agents": {
+    "enabled": true,
+    "max_parallel": 4,
+    "timeout_minutes": 10
+  }
 }

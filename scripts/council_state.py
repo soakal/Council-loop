@@ -29,6 +29,12 @@ REQUIRED_CEILING_KEYS = ("max_cycles", "max_minutes")
 REQUIRED_MODEL_KEYS = ("arbiter", "engineer", "realist")
 MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
 
+# Backward-compatible additions: configs written before the Security agent /
+# dynamic-spawning feature get these defaults injected rather than failing
+# validation. models.security and dynamic_agents are validated when present.
+DEFAULT_SECURITY_MODEL = "sonnet"
+DEFAULT_DYNAMIC_AGENTS = {"enabled": True, "max_parallel": 4, "timeout_minutes": 10}
+
 
 def load_json(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as handle:
@@ -44,6 +50,10 @@ def load_config(root: Path) -> dict[str, Any]:
     config = load_json(config_path)
     if local_path.exists():
         config.update(load_json(local_path))
+    if isinstance(config.get("models"), dict):
+        config["models"].setdefault("security", DEFAULT_SECURITY_MODEL)
+    if "dynamic_agents" not in config:
+        config["dynamic_agents"] = dict(DEFAULT_DYNAMIC_AGENTS)
     validate_config(config)
     return config
 
@@ -64,11 +74,23 @@ def validate_config(config: dict[str, Any]) -> None:
     models = config["models"]
     if not isinstance(models, dict):
         raise ValueError("models must be an object")
-    for key in REQUIRED_MODEL_KEYS:
+    model_keys = REQUIRED_MODEL_KEYS + (("security",) if "security" in models else ())
+    for key in model_keys:
         if not isinstance(models.get(key), str) or not models[key].strip():
             raise ValueError(f"models.{key} must be a non-empty string")
         if not MODEL_NAME_RE.match(models[key]):
             raise ValueError(f"models.{key} contains unsupported characters")
+
+    dynamic = config.get("dynamic_agents")
+    if dynamic is not None:
+        if not isinstance(dynamic, dict):
+            raise ValueError("dynamic_agents must be an object")
+        if not isinstance(dynamic.get("enabled"), bool):
+            raise ValueError("dynamic_agents.enabled must be a boolean")
+        for key in ("max_parallel", "timeout_minutes"):
+            value = dynamic.get(key)
+            if not isinstance(value, int) or value <= 0:
+                raise ValueError(f"dynamic_agents.{key} must be a positive integer")
 
     if not isinstance(config["target_repo"], str) or not config["target_repo"].strip():
         raise ValueError("target_repo must be a non-empty string")
@@ -152,7 +174,38 @@ def cmd_append_history(args: argparse.Namespace) -> int:
         "commit": None if args.commit == "null" else args.commit,
         "notes": args.notes,
     }
+    if args.security:
+        record["security"] = args.security
+    if args.dynamic_json:
+        dynamic = json.loads(Path(args.dynamic_json).read_text(encoding="utf-8"))
+        if not isinstance(dynamic, list):
+            raise ValueError("--dynamic-json must contain a JSON array")
+        record["dynamic"] = dynamic
     with history_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, ensure_ascii=True) + "\n")
+    return 0
+
+
+DYNAMIC_RESULTS = ("pass", "fail", "timeout")
+
+
+def cmd_append_dynamic(args: argparse.Namespace) -> int:
+    """Append one dynamic-agent spawn record to .council/state/dynamic-agents.jsonl."""
+    root = Path(args.root).resolve()
+    log_path = root / ".council" / "state" / "dynamic-agents.jsonl"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "cycle": args.cycle,
+        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "name": args.name,
+        "domain": args.domain,
+        "requested_by": args.requested_by,
+        "reason": args.reason,
+        "result": args.result,
+        "elapsed_s": args.elapsed_s,
+        "summary": args.summary,
+    }
+    with log_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, ensure_ascii=True) + "\n")
     return 0
 
@@ -177,6 +230,7 @@ def cmd_write_transcript(args: argparse.Namespace) -> int:
         ("Step", args.step),
         ("Arbiter", args.arbiter),
         ("Engineer", args.engineer),
+        ("Security", args.security),
         ("Realist", args.realist),
         ("Verification", args.verification),
         ("Outcome", f"verdict: {args.verdict}\ncommit: {args.commit}"),
@@ -257,13 +311,34 @@ def build_parser() -> argparse.ArgumentParser:
     append.add_argument("--verdict", required=True, choices=("accept", "deferred", "complete"))
     append.add_argument("--commit", required=True)
     append.add_argument("--notes", required=True)
+    append.add_argument(
+        "--security",
+        choices=("pass", "pass_with_fixes", "fail", "skipped"),
+        help="Security agent verdict for this cycle (optional, pre-security history lines omit it)",
+    )
+    append.add_argument(
+        "--dynamic-json",
+        help="Path to a JSON array of this cycle's dynamic-agent results (optional)",
+    )
     append.set_defaults(func=cmd_append_history)
+
+    dynamic = subparsers.add_parser("append-dynamic")
+    dynamic.add_argument("--cycle", required=True, type=int)
+    dynamic.add_argument("--name", required=True)
+    dynamic.add_argument("--domain", required=True)
+    dynamic.add_argument("--requested-by", required=True, choices=("engineer", "security", "realist", "arbiter"))
+    dynamic.add_argument("--reason", required=True)
+    dynamic.add_argument("--result", required=True, choices=DYNAMIC_RESULTS)
+    dynamic.add_argument("--elapsed-s", required=True, type=int)
+    dynamic.add_argument("--summary", default="")
+    dynamic.set_defaults(func=cmd_append_dynamic)
 
     transcript = subparsers.add_parser("write-transcript")
     transcript.add_argument("--cycle", required=True, type=int)
     transcript.add_argument("--step")
     transcript.add_argument("--arbiter", default="")
     transcript.add_argument("--engineer", default="")
+    transcript.add_argument("--security", default="")
     transcript.add_argument("--realist", default="")
     transcript.add_argument("--verification", default="")
     transcript.add_argument("--verdict")

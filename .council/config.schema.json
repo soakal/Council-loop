@@ -42,7 +42,22 @@
       "properties": {
         "arbiter": { "$ref": "#/$defs/modelName" },
         "engineer": { "$ref": "#/$defs/modelName" },
-        "realist": { "$ref": "#/$defs/modelName" }
+        "realist": { "$ref": "#/$defs/modelName" },
+        "security": {
+          "$ref": "#/$defs/modelName",
+          "description": "Model for the Security agent. Optional; defaults to 'sonnet' when omitted."
+        }
+      }
+    },
+    "dynamic_agents": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "max_parallel", "timeout_minutes"],
+      "description": "Policy for temporary per-cycle specialist agents. Optional; defaults to {enabled: true, max_parallel: 4, timeout_minutes: 10} when omitted.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "max_parallel": { "type": "integer", "minimum": 1 },
+        "timeout_minutes": { "type": "integer", "minimum": 1 }
       }
     },
     "dry_run": {

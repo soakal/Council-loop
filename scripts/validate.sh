@@ -17,6 +17,7 @@ required_files=(
   "$repo_root/.claude/commands/stop.md"
   "$repo_root/.claude/agents/arbiter.md"
   "$repo_root/.claude/agents/engineer.md"
+  "$repo_root/.claude/agents/security.md"
   "$repo_root/.claude/agents/realist.md"
   "$repo_root/scripts/council_doctor.py"
   "$repo_root/scripts/council_state.py"
