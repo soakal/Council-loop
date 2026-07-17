@@ -177,9 +177,21 @@ def cmd_append_history(args: argparse.Namespace) -> int:
     if args.security:
         record["security"] = args.security
     if args.dynamic_json:
-        dynamic = json.loads(Path(args.dynamic_json).read_text(encoding="utf-8"))
-        if not isinstance(dynamic, list):
-            raise ValueError("--dynamic-json must contain a JSON array")
+        try:
+            dynamic = json.loads(Path(args.dynamic_json).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"invalid --dynamic-json: {exc}", file=sys.stderr)
+            return 1
+        if not isinstance(dynamic, list) or not all(
+            isinstance(item, dict) and item.get("name") and item.get("result") in DYNAMIC_RESULTS
+            for item in dynamic
+        ):
+            print(
+                "invalid --dynamic-json: must be a JSON array of objects each carrying "
+                f"'name' and 'result' in {DYNAMIC_RESULTS}",
+                file=sys.stderr,
+            )
+            return 1
         record["dynamic"] = dynamic
     with history_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, ensure_ascii=True) + "\n")

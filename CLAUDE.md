@@ -34,7 +34,7 @@ overrides them per run. Machine-specific model overrides (e.g. a trial model) be
 | Command | What it does |
 |---|---|
 | `/goal <objective>. Acceptance: <criteria>` | Sets the goal, resets cycle state. |
-| `/council-cycle` | Runs ONE cycle (Arbiter → Engineer → Realist → commit on accept). |
+| `/council-cycle` | Runs ONE cycle (Arbiter → Engineer → Security → dynamic agents if requested → Realist → commit on full sign-off). |
 | `/council-status` | Shows goal, cycles done vs ceiling, elapsed time, recent history. |
 | `/council-doctor` | Health-checks config, target repo, tools, models, state, and test discovery. |
 | `/council-repair [--apply]` | Diagnoses state issues; can safely back up and repair malformed history lines. |
