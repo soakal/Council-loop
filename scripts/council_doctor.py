@@ -38,7 +38,11 @@ def add(results: list[tuple[str, str, str]], status: str, name: str, detail: str
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", default=".", help="Council Loop project root")
+    parser.add_argument(
+        "--root",
+        default=Path(__file__).resolve().parents[1],
+        help="Council Loop project root (defaults to this script's own repo, not the caller's cwd)",
+    )
     args = parser.parse_args()
     root = Path(args.root).resolve()
     results: list[tuple[str, str, str]] = []

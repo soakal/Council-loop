@@ -44,12 +44,35 @@ def load_json(path: Path) -> dict[str, Any]:
     return data
 
 
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge override into base. dict + dict merges per-key;
+    any other type pairing (including dict vs. non-dict) lets override win
+    outright, same as a plain dict.update() would for that key."""
+    merged = dict(base)
+    for key, value in override.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def load_config(root: Path) -> dict[str, Any]:
     config_path = root / ".council" / "config.json"
     local_path = root / ".council" / "config.local.json"
     config = load_json(config_path)
+    print(f"council config root: {root}", file=sys.stderr)
     if local_path.exists():
-        config.update(load_json(local_path))
+        config = _deep_merge(config, load_json(local_path))
+        print("config.local.json: applied", file=sys.stderr)
+    else:
+        print(
+            "WARNING: config.local.json not found -- using tracked config.json "
+            "values only (expected on a fresh clone or git worktree, since the "
+            "file is gitignored and NOT copied into worktrees)",
+            file=sys.stderr,
+        )
     if isinstance(config.get("models"), dict):
         config["models"].setdefault("security", DEFAULT_SECURITY_MODEL)
     if "dynamic_agents" not in config:
@@ -308,7 +331,13 @@ def cmd_lookup_commit(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", default=".", help="Council Loop project root")
+    parser.add_argument(
+        "--root",
+        default=Path(__file__).resolve().parents[1],
+        help="Council Loop project root (defaults to this script's own repo, "
+        "not the caller's cwd -- a cycle invoked with a drifted/worktree cwd "
+        "must still read THIS repo's .council/, never a copy's)",
+    )
     subparsers = parser.add_subparsers(required=True)
 
     effective = subparsers.add_parser("effective-config")

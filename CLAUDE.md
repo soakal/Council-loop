@@ -48,7 +48,7 @@ overrides them per run. Machine-specific model overrides (e.g. a trial model) be
 
 - `.council/config.json` — `target_repo`, `ceiling` (`max_cycles`, `max_minutes`), `revise_attempts`, `models`, `dry_run`, `open_pr`, `transcripts`, `test_commands`, `auto_commit`, `commit_prefix`.
 - `.council/config.schema.json` — JSON schema for editor help and config review.
-- `.council/config.local.json` — optional, gitignored, per-machine overlay whose keys win over `config.json` (shallow per-key merge).
+- `.council/config.local.json` — optional, gitignored, per-machine overlay whose keys win over `config.json`, merged recursively (a partial nested object overrides just that leaf). Gitignored means it does NOT exist in a fresh clone or `git worktree` — a worktree-driven run silently falls back to `config.json`'s tracked values with no error unless the file is copied over; `effective-config` prints its resolved root + local-file-found status to stderr for exactly this reason. `--root` also defaults to this repo's own directory regardless of the caller's cwd.
 - `.council/state/goal.md` — current objective + acceptance criteria + `started_at` (runtime, gitignored).
 - `.council/state/history.jsonl` — one line per cycle (runtime, gitignored).
 - `.council/state/transcripts/` — optional readable cycle transcripts (runtime, gitignored).

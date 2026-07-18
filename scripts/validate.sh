@@ -91,6 +91,61 @@ tmp_root="$(mktemp -d)"
 trap 'rm -rf "$tmp_root"' EXIT
 mkdir -p "$tmp_root/.council/state"
 cp "$repo_root/.council/config.json" "$tmp_root/.council/config.json"
+
+# --- config.local.json absent: WARNING on stderr, base config unchanged ---
+no_local_stderr="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" effective-config 2>&1 >/dev/null)"
+if [[ "$no_local_stderr" != *"WARNING: config.local.json not found"* ]]; then
+  echo "Expected a config.local.json-not-found WARNING on stderr, got: $no_local_stderr" >&2
+  exit 1
+fi
+
+# --- config.local.json present, partial nested override: deep-merge, not shallow-replace ---
+base_max_minutes="$(python3 - "$tmp_root/.council/config.json" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], encoding="utf-8"))["ceiling"]["max_minutes"])
+PY
+)"
+cat > "$tmp_root/.council/config.local.json" <<'JSON'
+{"ceiling": {"max_cycles": 999}, "transcripts": true}
+JSON
+merged_stdout="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" effective-config 2>"$tmp_root/merge-stderr.log")"
+merged_stderr="$(cat "$tmp_root/merge-stderr.log")"
+if [[ "$merged_stderr" != *"config.local.json: applied"* ]]; then
+  echo "Expected a config.local.json-applied line on stderr, got: $merged_stderr" >&2
+  exit 1
+fi
+python3 - "$merged_stdout" "$base_max_minutes" <<'PY'
+import json
+import sys
+
+config = json.loads(sys.argv[1])
+base_max_minutes = int(sys.argv[2])
+
+if config["ceiling"]["max_cycles"] != 999:
+    raise SystemExit(f"expected merged ceiling.max_cycles == 999, got {config['ceiling']['max_cycles']}")
+if config["ceiling"]["max_minutes"] != base_max_minutes:
+    raise SystemExit(
+        "partial nested ceiling override in config.local.json clobbered "
+        f"max_minutes instead of merging (deep-merge regression): "
+        f"expected {base_max_minutes}, got {config['ceiling']['max_minutes']}"
+    )
+if config["transcripts"] is not True:
+    raise SystemExit(f"expected scalar override transcripts == true, got {config['transcripts']}")
+PY
+rm -f "$tmp_root/.council/config.local.json" "$tmp_root/merge-stderr.log"
+
+# --- --root default is cwd-independent: no --root, run from an unrelated directory ---
+scratch_cwd_dir="$(mktemp -d)"
+default_root_output="$(cd "$scratch_cwd_dir" && python3 "$repo_root/scripts/council_state.py" effective-config)"
+explicit_root_output="$(python3 "$repo_root/scripts/council_state.py" --root "$repo_root" effective-config)"
+rm -rf "$scratch_cwd_dir"
+if [[ "$default_root_output" != "$explicit_root_output" ]]; then
+  echo "effective-config with no --root (cwd elsewhere) differs from --root \"\$repo_root\" -- --root default is not cwd-independent" >&2
+  exit 1
+fi
+
 python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" append-history \
   --cycle 1 \
   --step 'validate "quoted" history' \

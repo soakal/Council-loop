@@ -103,9 +103,13 @@ see setup above. Those helpers write to a separate, per-machine
 `.council\config.local.json` file, which quietly overrides `target_repo` from `config.json`
 — so you never need to hand-edit `config.json` just to point at a different project.)*
 
-**Advanced note:** local overrides are shallow. If you put a nested setting in
-`.council\config.local.json`, include the whole nested object. For example:
-`{"ceiling": {"max_cycles": 20, "max_minutes": 60}}`.
+**Advanced note:** local overrides merge recursively, so a partial nested setting like
+`{"ceiling": {"max_cycles": 20}}` in `.council\config.local.json` only overrides
+`max_cycles` — `max_minutes` still comes from `config.json`. Because this file is
+gitignored, it won't exist in a `git worktree` (only tracked files get copied there) —
+a worktree-driven run silently falls back to `config.json`'s values unless you copy it
+over. Every `effective-config` call prints its resolved root and whether the local file
+was found to stderr, so you can confirm overrides are actually being picked up.
 
 ---
 

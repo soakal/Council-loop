@@ -96,13 +96,18 @@ and the git-safety guards are still hard stops — `/goal` is the full reset pat
 | `test_commands` | Optional explicit verification commands. Leave empty to auto-discover common test commands. |
 | `auto_commit` | On ACCEPT: `true` runs the artifact guard, stages, and commits. `false` runs the same artifact guard and stages the changes but does not commit — history records `"commit": null`. |
 | `commit_prefix` | Prefix for council commit messages (default `council:`). |
-| `config.local.json` | Optional, gitignored, per-machine override file living beside `config.json` (`.council/config.local.json`). Any keys it sets win over `config.json` (shallow per-key merge — partial files like `{"target_repo": "..."}` are fine). `set-target.ps1` and `set-target.sh` write to this file instead of the tracked `config.json`. |
+| `config.local.json` | Optional, gitignored, per-machine override file living beside `config.json` (`.council/config.local.json`). Any keys it sets win over `config.json`, merged recursively — a partial nested object like `{"ceiling": {"max_cycles": 20}}` overrides just that leaf and leaves `max_minutes` (and everything else) at `config.json`'s value. `set-target.ps1` and `set-target.sh` write to this file instead of the tracked `config.json`. |
 
-Because the merge is shallow, override complete nested objects when using
-`config.local.json`. For example, use
-`{"ceiling": {"max_cycles": 20, "max_minutes": 60}}`, not only
-`{"ceiling": {"max_cycles": 20}}`, or the local `ceiling` value will replace the whole
-base `ceiling` object.
+**Because `config.local.json` is gitignored, it does NOT exist in a fresh clone or a
+`git worktree`** — a worktree only receives tracked files. Driving a cycle from a
+worktree with no copy of `config.local.json` silently falls back to `config.json`'s
+tracked values with no error (this is by design for a fresh machine with no local
+overrides, but it's easy to hit by accident with a worktree-based run). Every
+`effective-config` call prints its resolved root and whether `config.local.json` was
+found to stderr — check that line if a run's ceiling/model overrides don't seem to be
+taking effect. `--root` also defaults to this repo's own directory regardless of the
+caller's current working directory, so a drifted cwd can no longer cause a cycle to
+silently read the wrong `.council/`.
 
 To run the council against a repo you don't have locally: clone it, set `target_repo` to
 its path. The council commits into **that** repo's history.
