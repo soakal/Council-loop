@@ -325,6 +325,102 @@ def cmd_repair_history(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_utc_ts(value: str) -> datetime:
+    """Parse an ISO-8601 UTC timestamp in append-history's own format
+    (`%Y-%m-%dT%H:%M:%SZ`). Raises ValueError on anything else."""
+    return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
+def _clean_text(value: Any, limit: int) -> str:
+    """Collapse whitespace/newlines to single spaces and truncate, so
+    markdown-sourced or JSON-escaped values can't break summary structure."""
+    text = "" if value is None else str(value)
+    text = " ".join(text.split())
+    if len(text) > limit:
+        text = text[:limit].rstrip() + "..."
+    return text
+
+
+def cmd_run_summary(args: argparse.Namespace) -> int:
+    """Print a bounded markdown-ish summary of history lines with ts >= --since.
+    Empty stdout + exit 0 means "nothing to emit" (the driver's signal)."""
+    root = Path(args.root).resolve()
+    try:
+        since = _parse_utc_ts(args.since)
+    except ValueError as exc:
+        print(f"invalid --since timestamp (expected ISO-8601 UTC, e.g. 2026-07-21T00:00:00Z): {exc}", file=sys.stderr)
+        return 1
+
+    history_path = root / ".council" / "state" / "history.jsonl"
+    qualifying: list[dict[str, Any]] = []
+    if history_path.exists():
+        for line in history_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(item, dict):
+                continue
+            ts_raw = item.get("ts")
+            if not isinstance(ts_raw, str):
+                continue
+            try:
+                ts = _parse_utc_ts(ts_raw)
+            except ValueError:
+                continue
+            if ts >= since:
+                qualifying.append(item)
+
+    if not qualifying:
+        return 0
+
+    verdict_tally = {"accept": 0, "deferred": 0, "complete": 0}
+    commits: list[str] = []
+    newest = qualifying[0]
+    newest_ts = _parse_utc_ts(newest["ts"])
+    for item in qualifying:
+        verdict = item.get("verdict")
+        if verdict in verdict_tally:
+            verdict_tally[verdict] += 1
+        commit = item.get("commit")
+        if commit:
+            commits.append(_clean_text(commit, 100))
+        item_ts = _parse_utc_ts(item["ts"])
+        if item_ts > newest_ts:
+            newest = item
+            newest_ts = item_ts
+
+    goal = "unknown"
+    goal_path = root / ".council" / "state" / "goal.md"
+    if goal_path.exists():
+        for line in goal_path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            goal = _clean_text(stripped, 200)
+            break
+
+    stop_flag_path = root / ".council" / "state" / "stop.flag"
+    stop_reason = "ceiling/loop-exit"
+    if stop_flag_path.exists():
+        cleaned = _clean_text(stop_flag_path.read_text(encoding="utf-8"), 300)
+        if cleaned:
+            stop_reason = cleaned
+
+    lines = [
+        f"Goal: {goal}",
+        f"Cycles run: {len(qualifying)}",
+        "Verdicts: accept={accept}, deferred={deferred}, complete={complete}".format(**verdict_tally),
+        f"Commits: {', '.join(commits) if commits else 'none'}",
+        f"Last step: {_clean_text(newest.get('step'), 200)}",
+        f"Stop reason: {stop_reason}",
+    ]
+    print("\n".join(lines))
+    return 0
+
+
 def cmd_lookup_commit(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     history, invalid = iter_history(root / ".council" / "state" / "history.jsonl", strict=True)
@@ -410,6 +506,14 @@ def build_parser() -> argparse.ArgumentParser:
     lookup = subparsers.add_parser("lookup-commit")
     lookup.add_argument("--cycle", required=True, type=int)
     lookup.set_defaults(func=cmd_lookup_commit)
+
+    summary = subparsers.add_parser("run-summary")
+    summary.add_argument(
+        "--since",
+        required=True,
+        help="ISO-8601 UTC timestamp (e.g. 2026-07-21T00:00:00Z); summarizes history lines with ts >= this value",
+    )
+    summary.set_defaults(func=cmd_run_summary)
 
     return parser
 

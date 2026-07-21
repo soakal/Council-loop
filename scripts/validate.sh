@@ -188,4 +188,67 @@ if [[ "$history_count" != "1" ]]; then
   exit 1
 fi
 
+tmp_root2="$(mktemp -d)"
+trap 'rm -rf "$tmp_root" "$tmp_root2"' EXIT
+mkdir -p "$tmp_root2/.council/state"
+
+# --- run-summary: absent history file -> empty stdout, exit 0 (no crash) ---
+absent_history_out="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root2" run-summary --since "2020-01-01T00:00:00Z")"
+if [[ -n "$absent_history_out" ]]; then
+  echo "Expected empty run-summary output for absent history, got: $absent_history_out" >&2
+  exit 1
+fi
+
+# --- run-summary: round trip -- two history lines (accept+commit, deferred+null-commit) ---
+python3 "$repo_root/scripts/council_state.py" --root "$tmp_root2" append-history \
+  --cycle 1 \
+  --step 'first cycle step' \
+  --verdict accept \
+  --commit def5678 \
+  --notes 'first notes'
+python3 "$repo_root/scripts/council_state.py" --root "$tmp_root2" append-history \
+  --cycle 2 \
+  --step 'second cycle step' \
+  --verdict deferred \
+  --commit null \
+  --notes 'second notes'
+summary_out="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root2" run-summary --since "2020-01-01T00:00:00Z")"
+if [[ "$summary_out" != *"Cycles run: 2"* ]]; then
+  echo "Expected run-summary to report Cycles run: 2, got: $summary_out" >&2
+  exit 1
+fi
+if [[ "$summary_out" != *"accept=1"* || "$summary_out" != *"deferred=1"* ]]; then
+  echo "Expected run-summary to report both verdict tallies, got: $summary_out" >&2
+  exit 1
+fi
+if [[ "$summary_out" != *"def5678"* ]]; then
+  echo "Expected run-summary to include commit SHA def5678, got: $summary_out" >&2
+  exit 1
+fi
+if [[ "$summary_out" != *"Goal: unknown"* || "$summary_out" != *"Stop reason: ceiling/loop-exit"* ]]; then
+  echo "Expected run-summary placeholders for absent goal/stop files, got: $summary_out" >&2
+  exit 1
+fi
+
+# --- run-summary: future --since (nothing to summarize yet) -> empty stdout, exit 0 ---
+future_out="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root2" run-summary --since "2099-01-01T00:00:00Z")"
+if [[ -n "$future_out" ]]; then
+  echo "Expected empty run-summary output for future --since, got: $future_out" >&2
+  exit 1
+fi
+
+# --- run-summary: malformed --since -> nonzero exit, stderr message ---
+set +e
+malformed_stderr="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root2" run-summary --since "not-a-timestamp" 2>&1 >/dev/null)"
+malformed_status=$?
+set -e
+if [[ "$malformed_status" -eq 0 ]]; then
+  echo "Expected nonzero exit for malformed --since, got exit 0" >&2
+  exit 1
+fi
+if [[ -z "$malformed_stderr" ]]; then
+  echo "Expected a stderr message for malformed --since, got none" >&2
+  exit 1
+fi
+
 echo "Validation passed."
