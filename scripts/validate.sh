@@ -251,4 +251,31 @@ if [[ -z "$malformed_stderr" ]]; then
   exit 1
 fi
 
+# --- run-loop.ps1: parse-check with pwsh/powershell if available; WARNING-only skip otherwise ---
+pwsh_bin=""
+if command -v pwsh >/dev/null 2>&1; then
+  pwsh_bin="pwsh"
+elif command -v powershell >/dev/null 2>&1; then
+  pwsh_bin="powershell"
+fi
+if [[ -n "$pwsh_bin" ]]; then
+  parse_checker="$tmp_root/parse-check.ps1"
+  cat > "$parse_checker" <<'PS1'
+param([string]$TargetPath)
+$errors = $null
+[System.Management.Automation.Language.Parser]::ParseFile($TargetPath, [ref]$null, [ref]$errors) | Out-Null
+if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }
+PS1
+  set +e
+  "$pwsh_bin" -NoProfile -File "$parse_checker" -TargetPath "$repo_root/run-loop.ps1"
+  parse_status=$?
+  set -e
+  if [[ "$parse_status" -ne 0 ]]; then
+    echo "run-loop.ps1 failed PowerShell parse check" >&2
+    exit 1
+  fi
+else
+  echo "WARNING: no pwsh/powershell available in this validate.sh context -- skipping run-loop.ps1 parse check" >&2
+fi
+
 echo "Validation passed."

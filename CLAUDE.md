@@ -64,3 +64,26 @@ overrides them per run. Machine-specific model overrides (e.g. a trial model) be
 - **Commit only on full sign-off** — Security `PASS`/`PASS_WITH_FIXES` AND every spawned dynamic agent `pass` AND Realist `ACCEPT` — using `<commit_prefix> cycle <n>: <summary>` in `target_repo`. A failed Security audit or dynamic agent (incl. timeout) defers the cycle, and the deferred cleanup auto-reverts the Engineer's residue — that IS the no-manual-intervention rollback to the last known-good state (post-commit reverts stay with `/council-rollback`).
 - History lines now carry optional `security` and `dynamic` fields; pre-upgrade lines without them stay valid.
 - Portability first: nothing here should hard-code a machine-specific path outside `config.json`.
+
+## Brain event loopback (best-effort, driver-only)
+
+- Optional `brain_events` config block (`{"enabled": true, "url": "http://127.0.0.1:8765"}`, defaults
+  injected like `dynamic_agents` when the key is absent from an older config) lets `run-loop.ps1`
+  POST a single summary note to the Brain MCP server (`POST $url/raw`) after a driver run, so the
+  02:00 Brain Organizer can fold "a council run happened" into wiki memory.
+- **One event per driver run, never per cycle.** `run-loop.ps1` captures `$runStart` (UTC ISO-8601)
+  before its `for` loop, then — after the loop, at the single point every exit path (pre-cycle
+  stop.flag, post-cycle stop.flag, ceiling exhaustion) converges — runs one `try/catch` block that
+  reads `brain_events` from `python3 scripts/council_state.py effective-config` (stdout only, stderr
+  discarded) and, if enabled, calls `python3 scripts/council_state.py run-summary --since $runStart`.
+  A non-empty result becomes the event body (`event-council-loop-run-complete-<ts>.md`) posted via
+  `Invoke-RestMethod` with a 5s timeout; empty output (nothing recorded this run) is a silent no-op.
+- **Manual `/council-cycle` invocations never emit** — only the `run-loop.ps1` driver does, because
+  the summary is derived from `history.jsonl` at driver-exit time. A session that runs `/council-cycle`
+  by hand (without `.\run-loop.ps1`) will not produce a Brain event; this is a known, documented
+  limitation, not a bug.
+- **Best-effort, loopback-only, never fatal.** The whole emit block is wrapped in one `try/catch`
+  that swallows every exception and just logs a skip line — a missing `python3`, an unreachable/down
+  Brain server, `brain_events.enabled: false`, or empty `run-summary` output must never change
+  `run-loop.ps1`'s exit code or normal exit behavior. There are no retries and no buffering; a dropped
+  event is acceptable (`history.jsonl` remains the system of record).
