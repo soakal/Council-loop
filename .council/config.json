@@ -22,5 +22,9 @@
     "enabled": true,
     "max_parallel": 4,
     "timeout_minutes": 10
+  },
+  "brain_events": {
+    "enabled": true,
+    "url": "http://127.0.0.1:8765"
   }
 }

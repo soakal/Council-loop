@@ -34,6 +34,7 @@ MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
 # validation. models.security and dynamic_agents are validated when present.
 DEFAULT_SECURITY_MODEL = "sonnet"
 DEFAULT_DYNAMIC_AGENTS = {"enabled": True, "max_parallel": 4, "timeout_minutes": 10}
+DEFAULT_BRAIN_EVENTS = {"enabled": True, "url": "http://127.0.0.1:8765"}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -77,6 +78,8 @@ def load_config(root: Path) -> dict[str, Any]:
         config["models"].setdefault("security", DEFAULT_SECURITY_MODEL)
     if "dynamic_agents" not in config:
         config["dynamic_agents"] = dict(DEFAULT_DYNAMIC_AGENTS)
+    if "brain_events" not in config:
+        config["brain_events"] = dict(DEFAULT_BRAIN_EVENTS)
     validate_config(config)
     return config
 
@@ -114,6 +117,17 @@ def validate_config(config: dict[str, Any]) -> None:
             value = dynamic.get(key)
             if not isinstance(value, int) or value <= 0:
                 raise ValueError(f"dynamic_agents.{key} must be a positive integer")
+
+    brain_events = config.get("brain_events")
+    if brain_events is not None:
+        if not isinstance(brain_events, dict):
+            raise ValueError("brain_events must be an object")
+        if not isinstance(brain_events.get("enabled"), bool):
+            raise ValueError("brain_events.enabled must be a boolean")
+        if "url" in brain_events and (
+            not isinstance(brain_events["url"], str) or not brain_events["url"].strip()
+        ):
+            raise ValueError("brain_events.url must be a non-empty string")
 
     if not isinstance(config["target_repo"], str) or not config["target_repo"].strip():
         raise ValueError("target_repo must be a non-empty string")

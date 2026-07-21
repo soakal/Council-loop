@@ -60,6 +60,15 @@
         "timeout_minutes": { "type": "integer", "minimum": 1 }
       }
     },
+    "brain_events": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Best-effort Brain event emission after a driver run. Optional; defaults to {enabled: true, url: 'http://127.0.0.1:8765'} when omitted.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "url": { "type": "string", "minLength": 1 }
+      }
+    },
     "dry_run": {
       "type": "boolean",
       "description": "When true, the council plans/reviews but must not modify, stage, commit, push, or open PRs."
