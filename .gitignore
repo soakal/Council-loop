@@ -4,6 +4,7 @@
 .council/state/history.jsonl.bak-*
 .council/state/stop.flag
 .council/state/transcripts/
+run-loop-*.log
 
 # Local overrides
 .council/config.local.json
