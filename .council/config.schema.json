@@ -46,6 +46,10 @@
         "security": {
           "$ref": "#/$defs/modelName",
           "description": "Model for the Security agent. Optional; defaults to 'sonnet' when omitted."
+        },
+        "verifier": {
+          "$ref": "#/$defs/modelName",
+          "description": "Model for the Verifier (QA) agent. Optional; defaults to 'sonnet' when omitted."
         }
       }
     },
@@ -58,6 +62,16 @@
         "enabled": { "type": "boolean" },
         "max_parallel": { "type": "integer", "minimum": 1 },
         "timeout_minutes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "verifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "max_test_files"],
+      "description": "Policy for the Verifier (QA) role, which authors regression coverage for the cycle's diff. Optional; defaults to {enabled: true, max_test_files: 2} when omitted. Set enabled:false for docs-only or otherwise non-code goals so a cycle does not spend a seat on it.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "max_test_files": { "type": "integer", "minimum": 1 }
       }
     },
     "brain_events": {

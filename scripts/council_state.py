@@ -30,10 +30,13 @@ REQUIRED_MODEL_KEYS = ("arbiter", "engineer", "realist")
 MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
 
 # Backward-compatible additions: configs written before the Security agent /
-# dynamic-spawning feature get these defaults injected rather than failing
-# validation. models.security and dynamic_agents are validated when present.
+# dynamic-spawning / Verifier features get these defaults injected rather than
+# failing validation. models.security, models.verifier, dynamic_agents and
+# verifier are validated when present.
 DEFAULT_SECURITY_MODEL = "sonnet"
+DEFAULT_VERIFIER_MODEL = "sonnet"
 DEFAULT_DYNAMIC_AGENTS = {"enabled": True, "max_parallel": 4, "timeout_minutes": 10}
+DEFAULT_VERIFIER = {"enabled": True, "max_test_files": 2}
 DEFAULT_BRAIN_EVENTS = {"enabled": True, "url": "http://127.0.0.1:8765"}
 
 
@@ -76,8 +79,11 @@ def load_config(root: Path) -> dict[str, Any]:
         )
     if isinstance(config.get("models"), dict):
         config["models"].setdefault("security", DEFAULT_SECURITY_MODEL)
+        config["models"].setdefault("verifier", DEFAULT_VERIFIER_MODEL)
     if "dynamic_agents" not in config:
         config["dynamic_agents"] = dict(DEFAULT_DYNAMIC_AGENTS)
+    if "verifier" not in config:
+        config["verifier"] = dict(DEFAULT_VERIFIER)
     if "brain_events" not in config:
         config["brain_events"] = dict(DEFAULT_BRAIN_EVENTS)
     validate_config(config)
@@ -100,7 +106,8 @@ def validate_config(config: dict[str, Any]) -> None:
     models = config["models"]
     if not isinstance(models, dict):
         raise ValueError("models must be an object")
-    model_keys = REQUIRED_MODEL_KEYS + (("security",) if "security" in models else ())
+    optional_model_keys = tuple(key for key in ("security", "verifier") if key in models)
+    model_keys = REQUIRED_MODEL_KEYS + optional_model_keys
     for key in model_keys:
         if not isinstance(models.get(key), str) or not models[key].strip():
             raise ValueError(f"models.{key} must be a non-empty string")
@@ -117,6 +124,16 @@ def validate_config(config: dict[str, Any]) -> None:
             value = dynamic.get(key)
             if not isinstance(value, int) or value <= 0:
                 raise ValueError(f"dynamic_agents.{key} must be a positive integer")
+
+    verifier = config.get("verifier")
+    if verifier is not None:
+        if not isinstance(verifier, dict):
+            raise ValueError("verifier must be an object")
+        if not isinstance(verifier.get("enabled"), bool):
+            raise ValueError("verifier.enabled must be a boolean")
+        max_test_files = verifier.get("max_test_files")
+        if not isinstance(max_test_files, int) or max_test_files <= 0:
+            raise ValueError("verifier.max_test_files must be a positive integer")
 
     brain_events = config.get("brain_events")
     if brain_events is not None:
@@ -213,6 +230,8 @@ def cmd_append_history(args: argparse.Namespace) -> int:
     }
     if args.security:
         record["security"] = args.security
+    if args.verifier:
+        record["verifier"] = args.verifier
     if args.dynamic_json:
         try:
             dynamic = json.loads(Path(args.dynamic_json).read_text(encoding="utf-8"))
@@ -280,6 +299,7 @@ def cmd_write_transcript(args: argparse.Namespace) -> int:
         ("Arbiter", args.arbiter),
         ("Engineer", args.engineer),
         ("Security", args.security),
+        ("Verifier (QA)", args.verifier),
         ("Realist", args.realist),
         ("Verification", args.verification),
         ("Outcome", f"verdict: {args.verdict}\ncommit: {args.commit}"),
@@ -468,6 +488,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Security agent verdict for this cycle (optional, pre-security history lines omit it)",
     )
     append.add_argument(
+        "--verifier",
+        choices=("test_added", "test_updated", "no_test", "fail", "disabled", "skipped"),
+        help="Verifier (QA) verdict for this cycle (optional, pre-verifier history lines omit it)",
+    )
+    append.add_argument(
         "--dynamic-json",
         help="Path to a JSON array of this cycle's dynamic-agent results (optional)",
     )
@@ -477,7 +502,7 @@ def build_parser() -> argparse.ArgumentParser:
     dynamic.add_argument("--cycle", required=True, type=int)
     dynamic.add_argument("--name", required=True)
     dynamic.add_argument("--domain", required=True)
-    dynamic.add_argument("--requested-by", required=True, choices=("engineer", "security", "realist", "arbiter"))
+    dynamic.add_argument("--requested-by", required=True, choices=("engineer", "security", "verifier", "realist", "arbiter"))
     dynamic.add_argument("--reason", required=True)
     dynamic.add_argument("--result", required=True, choices=DYNAMIC_RESULTS)
     dynamic.add_argument("--elapsed-s", required=True, type=int)
@@ -490,6 +515,7 @@ def build_parser() -> argparse.ArgumentParser:
     transcript.add_argument("--arbiter", default="")
     transcript.add_argument("--engineer", default="")
     transcript.add_argument("--security", default="")
+    transcript.add_argument("--verifier", default="")
     transcript.add_argument("--realist", default="")
     transcript.add_argument("--verification", default="")
     transcript.add_argument("--verdict")

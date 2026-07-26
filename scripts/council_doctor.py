@@ -59,6 +59,7 @@ def main() -> int:
         ".claude/agents/arbiter.md",
         ".claude/agents/engineer.md",
         ".claude/agents/security.md",
+        ".claude/agents/verifier.md",
         ".claude/agents/realist.md",
         "scripts/council_doctor.py",
         "scripts/council_state.py",

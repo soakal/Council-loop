@@ -1,22 +1,28 @@
 # Council Loop
 
 A **portable, native Claude Code** autonomous coding loop — a re-implementation of the
-PowerShell `claude-council-loop`. A four-role council advances a goal one verifiable
+PowerShell `claude-council-loop`. A five-role council advances a goal one verifiable
 step at a time and auto-commits each accepted step. It runs entirely on Claude Code
 (custom commands + subagents + `/loop`), so there are **no direct API calls and no
 per-token billing** — it uses your Claude Code subscription.
 
 ```
-Arbiter (Opus) → Engineer (Sonnet) → Security (Sonnet) → Realist (Sonnet) → commit
-   plan             implement          audit + fix          review/critique
-                                          ↕
-                          dynamic specialist agents (parallel,
-                          per-cycle, spawned on request)
+Arbiter (Opus) → Engineer (Sonnet) → Security (Sonnet) → Verifier (Sonnet) → Realist (Sonnet) → commit
+    plan            implement          audit + fix         test + prove        review/critique
+                                                                ↕
+                                               dynamic specialist agents (parallel,
+                                               per-cycle, spawned on request)
 ```
 
-Commits require **Security + all spawned dynamic agents + Realist** to sign off. The
-Security agent runs bandit/pip-audit where applicable plus an LLM vulnerability hunt,
-auto-fixes low-severity findings, and blocks the cycle on high-severity ones. Any
+Commits require **Security + Verifier + all spawned dynamic agents + Realist** to sign
+off. The Security agent runs bandit/pip-audit where applicable plus an LLM vulnerability
+hunt, auto-fixes low-severity findings, and blocks the cycle on high-severity ones. The
+Verifier is the council's QA seat: it reads the cycle's diff and, when the step changes
+real behavior, writes or extends one focused test that pins that behavior down and runs
+it — so a change can no longer ship with zero new coverage unless the Verifier can
+justify the skip (docs/config-only, already covered and cited, no harness). It edits
+test and verification files only; a failing test means a real defect and escalates to
+the Engineer, blocking the cycle. Set `verifier.enabled: false` for docs-only goals. Any
 permanent agent can ask the Arbiter to spawn temporary read-only specialists
 (db-schema, infra, crypto, api-contract, multi-tenancy, performance, accessibility,
 privacy/PII, license, concurrency, observability, … — illustrative, not exhaustive)
@@ -54,10 +60,11 @@ that run in parallel with a per-agent timeout; every spawn is logged and shown i
    /loop /council-cycle
    ```
    Each cycle: Arbiter plans the next step → Engineer implements it → Security audits it
-   (auto-fixing low-severity findings, blocking on high) → any requested dynamic
-   specialists run in parallel → Realist reviews → on full sign-off the change is
-   committed to `target_repo`. The loop stops on its own when the ceiling is hit or the
-   goal is complete.
+   (auto-fixing low-severity findings, blocking on high) → the Verifier adds and runs a
+   regression test for the new behavior → any requested dynamic specialists run in
+   parallel → Realist reviews → on full sign-off the change is committed to
+   `target_repo`. The loop stops on its own when the ceiling is hit or the goal is
+   complete.
 
 5. **Check in any time:** `/council-status` — shows the goal, cycles used vs. the ceiling,
    elapsed time, and recent history. Use `/stop` to halt cleanly at the next cycle
@@ -90,7 +97,7 @@ and the git-safety guards are still hard stops — `/goal` is the full reset pat
 |---|---|
 | `target_repo` | Absolute path where edits + commits happen. `"."` = this folder. |
 | `git_clone_url` | Optional — the repo's origin, for reference / cloning elsewhere. |
-| `revise_attempts` | How many Engineer↔Realist revision rounds before a step is deferred (default 2). |
+| `revise_attempts` | How many **Engineer re-invocations** a cycle may spend before the step is deferred (default 2). Shared across Security escalations, Verifier failures, dynamic-agent fixes, and Realist revisions. |
 | `models` | Which model each role uses (`fable` / `opus` / `sonnet` / `haiku`) — passed as a model override when each subagent is launched; the frontmatter in `.claude/agents/*.md` is the fallback. |
 | `dry_run` | If `true`, the council plans/reviews without modifying, staging, committing, pushing, or opening PRs. |
 | `open_pr` | If `true`, accepted committed cycles print PR-ready handoff details for wrappers/users to open a PR. |
@@ -98,6 +105,7 @@ and the git-safety guards are still hard stops — `/goal` is the full reset pat
 | `test_commands` | Optional explicit verification commands. Leave empty to auto-discover common test commands. |
 | `auto_commit` | On ACCEPT: `true` runs the artifact guard, stages, and commits. `false` runs the same artifact guard and stages the changes but does not commit — history records `"commit": null`. |
 | `commit_prefix` | Prefix for council commit messages (default `council:`). |
+| `verifier` | Policy for the QA role: `{"enabled": true, "max_test_files": 2}`. Set `enabled: false` for docs-only or non-code goals so a cycle doesn't spend a seat on it; `max_test_files` caps how many test files one cycle may touch. Optional — defaults injected when the key is absent. |
 | `config.local.json` | Optional, gitignored, per-machine override file living beside `config.json` (`.council/config.local.json`). Any keys it sets win over `config.json`, merged recursively — a partial nested object like `{"ceiling": {"max_cycles": 20}}` overrides just that leaf and leaves `max_minutes` (and everything else) at `config.json`'s value. `set-target.ps1` and `set-target.sh` write to this file instead of the tracked `config.json`. |
 
 **Because `config.local.json` is gitignored, it does NOT exist in a fresh clone or a
@@ -169,7 +177,7 @@ paths from their own location, so nothing else needs editing.
 
 ```
 .claude/
-  agents/    arbiter.md · engineer.md · security.md · realist.md   # the four council roles
+  agents/    arbiter.md · engineer.md · security.md · verifier.md · realist.md   # the five council roles
   commands/  goal.md · council-cycle.md · council-status.md · council-doctor.md
              council-repair.md · council-rollback.md · forge-skill.md · stop.md
   skills/    # reusable skills authored mid-run by /forge-skill

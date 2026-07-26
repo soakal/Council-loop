@@ -18,6 +18,7 @@ required_files=(
   "$repo_root/.claude/agents/arbiter.md"
   "$repo_root/.claude/agents/engineer.md"
   "$repo_root/.claude/agents/security.md"
+  "$repo_root/.claude/agents/verifier.md"
   "$repo_root/.claude/agents/realist.md"
   "$repo_root/scripts/council_doctor.py"
   "$repo_root/scripts/council_state.py"
@@ -135,6 +136,47 @@ if config["transcripts"] is not True:
     raise SystemExit(f"expected scalar override transcripts == true, got {config['transcripts']}")
 PY
 rm -f "$tmp_root/.council/config.local.json" "$tmp_root/merge-stderr.log"
+
+# --- verifier: absent models.verifier and verifier block -> defaults injected ---
+verifier_defaults_stdout="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" effective-config)"
+python3 - "$verifier_defaults_stdout" <<'PY'
+import json
+import sys
+
+config = json.loads(sys.argv[1])
+
+if config["models"].get("verifier") != "sonnet":
+    raise SystemExit(f"expected default models.verifier == 'sonnet', got {config['models'].get('verifier')}")
+if config.get("verifier") != {"enabled": True, "max_test_files": 2}:
+    raise SystemExit(f"expected default verifier block, got {config.get('verifier')}")
+PY
+
+# --- append-history --verifier round trip ---
+python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" append-history \
+  --cycle 2 \
+  --step 'verifier round trip' \
+  --verdict accept \
+  --commit null \
+  --notes 'verifier field check' \
+  --verifier test_added
+verifier_history_line="$(tail -n 1 "$tmp_root/.council/state/history.jsonl")"
+if [[ "$verifier_history_line" != *'"verifier": "test_added"'* ]]; then
+  echo "Expected appended history line to carry verifier: test_added, got: $verifier_history_line" >&2
+  exit 1
+fi
+
+# --- append-history --verifier rejects an unknown value ---
+set +e
+python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" append-history \
+  --cycle 3 --step 'bad verifier value' --verdict accept --commit null --notes 'x' --verifier bogus \
+  >/dev/null 2>&1
+bogus_verifier_status=$?
+set -e
+if [[ "$bogus_verifier_status" -eq 0 ]]; then
+  echo "Expected nonzero exit for --verifier bogus, got exit 0" >&2
+  exit 1
+fi
+rm -f "$tmp_root/.council/state/history.jsonl"
 
 # --- --root default is cwd-independent: no --root, run from an unrelated directory ---
 scratch_cwd_dir="$(mktemp -d)"

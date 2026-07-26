@@ -1,17 +1,18 @@
 # Council Loop — project memory
 
 Council Loop is a **portable, native Claude Code** re-implementation of the PowerShell
-`claude-council-loop`. It drives an autonomous **plan → implement → audit → review → commit**
-cycle using a four-role council, running entirely on Claude Code primitives (custom
+`claude-council-loop`. It drives an autonomous **plan → implement → audit → test → review → commit**
+cycle using a five-role council, running entirely on Claude Code primitives (custom
 commands, subagents, `/loop`) — **no direct Anthropic API calls, no per-token billing.**
 
-## The council (four permanent roles = four subagents)
+## The council (five permanent roles = five subagents)
 
 | Role | Subagent | Model | Job |
 |---|---|---|---|
 | **Arbiter** | `.claude/agents/arbiter.md` | Opus | Plans the single next step toward the goal. Never writes code. Also triages dynamic-agent spawn requests and arbitrates their results. |
 | **Engineer** | `.claude/agents/engineer.md` | Sonnet | Implements exactly that one step (minimal diff). Never commits. |
 | **Security** | `.claude/agents/security.md` | Sonnet | Audits the cycle's diff after the Engineer: bandit + pip-audit (where applicable) + LLM vuln hunt. Auto-fixes LOW findings; HIGH findings escalate to the Engineer and block the cycle. |
+| **Verifier** | `.claude/agents/verifier.md` | Sonnet | QA. After Security, reads the cycle's diff and — when the step changes real behavior — authors or extends ONE focused test that pins that behavior down, runs it, and reports. Edits test/verification files only; a genuine failure escalates to the Engineer and blocks the cycle. Skips (with a cited reason) on docs/config-only diffs, already-covered behavior, or no harness. |
 | **Realist** | `.claude/agents/realist.md` | Sonnet | Independently reviews → `ACCEPT` / `REVISE`. The brake before commit. |
 
 ### Dynamic agents (temporary, per-cycle)
@@ -37,7 +38,7 @@ overrides them per run. Machine-specific model overrides (e.g. a trial model) be
 | Command | What it does |
 |---|---|
 | `/goal <objective>. Acceptance: <criteria>` | Sets the goal, resets cycle state. |
-| `/council-cycle` | Runs ONE cycle (Arbiter → Engineer → Security → dynamic agents if requested → Realist → commit on full sign-off). |
+| `/council-cycle` | Runs ONE cycle (Arbiter → Engineer → Security → Verifier → dynamic agents if requested → Realist → commit on full sign-off). |
 | `/council-status` | Shows goal, cycles done vs ceiling, elapsed time, recent history. |
 | `/council-doctor` | Health-checks config, target repo, tools, models, state, and test discovery. |
 | `/council-repair [--apply]` | Diagnoses state issues; can safely back up and repair malformed history lines. |
@@ -49,7 +50,7 @@ overrides them per run. Machine-specific model overrides (e.g. a trial model) be
 
 ## State & config
 
-- `.council/config.json` — `target_repo`, `ceiling` (`max_cycles`, `max_minutes`), `revise_attempts`, `models`, `dry_run`, `open_pr`, `transcripts`, `test_commands`, `auto_commit`, `commit_prefix`.
+- `.council/config.json` — `target_repo`, `ceiling` (`max_cycles`, `max_minutes`), `revise_attempts`, `models`, `dry_run`, `open_pr`, `transcripts`, `test_commands`, `auto_commit`, `commit_prefix`, plus the optional `dynamic_agents`, `verifier`, and `brain_events` blocks (defaults injected when absent).
 - `.council/config.schema.json` — JSON schema for editor help and config review.
 - `.council/config.local.json` — optional, gitignored, per-machine overlay whose keys win over `config.json`, merged recursively (a partial nested object overrides just that leaf). Gitignored means it does NOT exist in a fresh clone or `git worktree` — a worktree-driven run silently falls back to `config.json`'s tracked values with no error unless the file is copied over; `effective-config` prints its resolved root + local-file-found status to stderr for exactly this reason. `--root` also defaults to this repo's own directory regardless of the caller's cwd.
 - `.council/state/goal.md` — current objective + acceptance criteria + `started_at` (runtime, gitignored).
@@ -63,9 +64,17 @@ overrides them per run. Machine-specific model overrides (e.g. a trial model) be
 - **Ceiling replaces the old cost cap:** the cycle stops at `max_cycles` OR `max_minutes`, whichever comes first — this is the subscription-model equivalent of the PowerShell dollar ceiling.
 - **Pre-run guards:** `target_repo` must be a git repository, and on the first cycle its working tree must be clean — so `git add -A` never sweeps the user's own uncommitted work into a council commit. Either failure writes `stop.flag`.
 - **One step per cycle.** The Engineer must not scope-creep; the Realist defaults to `REVISE` when unsure.
+- **Coverage is the Verifier's job, not the Engineer's.** The Engineer implements the step;
+  the Verifier adds the regression test in the same cycle. Don't plan separate "add a test
+  for the last step" cycles. A Verifier-authored test file is in-scope by construction and
+  the Realist must not reject it as scope creep — but the Realist DOES audit whether the
+  test is real and whether a claimed "already covered" citation exists.
+- The revise budget (`revise_attempts`) is shared across Security escalations, Verifier
+  failures, dynamic-agent fixes, and Realist revisions — every **engineer** re-invocation
+  counts against it. The Verifier's own test-repair attempts (max 2) do not.
 - **`/council-cycle` must never loop itself** — `/loop` owns iteration. Each invocation does exactly one cycle and exits.
-- **Commit only on full sign-off** — Security `PASS`/`PASS_WITH_FIXES` AND every spawned dynamic agent `pass` AND Realist `ACCEPT` — using `<commit_prefix> cycle <n>: <summary>` in `target_repo`. A failed Security audit or dynamic agent (incl. timeout) defers the cycle, and the deferred cleanup auto-reverts the Engineer's residue — that IS the no-manual-intervention rollback to the last known-good state (post-commit reverts stay with `/council-rollback`).
-- History lines now carry optional `security` and `dynamic` fields; pre-upgrade lines without them stay valid.
+- **Commit only on full sign-off** — Security `PASS`/`PASS_WITH_FIXES` AND the Verifier not `FAIL` AND every spawned dynamic agent `pass` AND Realist `ACCEPT` — using `<commit_prefix> cycle <n>: <summary>` in `target_repo`. A failed Security audit, a Verifier `FAIL`, or a failed dynamic agent (incl. timeout) defers the cycle, and the deferred cleanup auto-reverts the Engineer's and Verifier's residue — that IS the no-manual-intervention rollback to the last known-good state (post-commit reverts stay with `/council-rollback`).
+- History lines now carry optional `security`, `verifier`, and `dynamic` fields; pre-upgrade lines without them stay valid.
 - Portability first: nothing here should hard-code a machine-specific path outside `config.json`.
 
 ## Brain event loopback (best-effort, driver-only)
