@@ -34,6 +34,9 @@ SPAWN_REQUEST: <domain> — <one-line reason>   (optional, zero or more lines)
 ```
 Emit a `SPAWN_REQUEST` line when your change enters a domain that deserves a focused
 parallel audit beyond the normal Security/Realist review — e.g. database
-schema/migration safety, infrastructure or deployment config, cryptography. The
+schema/migration safety, infrastructure or deployment config, cryptography,
+api-contract/back-compat, multi-tenancy/authz-isolation, performance, accessibility,
+privacy/PII, license/dependency-provenance, concurrency, observability (illustrative,
+not exhaustive — any domain a general review wouldn't cover is fair game). The
 Arbiter triages requests and launches approved specialists; you never launch agents
 yourself. Request sparingly — only when the domain genuinely needs specialist depth.

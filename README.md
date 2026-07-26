@@ -18,8 +18,10 @@ Commits require **Security + all spawned dynamic agents + Realist** to sign off.
 Security agent runs bandit/pip-audit where applicable plus an LLM vulnerability hunt,
 auto-fixes low-severity findings, and blocks the cycle on high-severity ones. Any
 permanent agent can ask the Arbiter to spawn temporary read-only specialists
-(db-schema, infra, crypto, …) that run in parallel with a per-agent timeout; every
-spawn is logged and shown in `/council-status`.
+(db-schema, infra, crypto, api-contract, multi-tenancy, performance, accessibility,
+privacy/PII, license, concurrency, observability, … — illustrative, not exhaustive)
+that run in parallel with a per-agent timeout; every spawn is logged and shown in
+`/council-status`.
 
 > **New here? Read [QUICKSTART.md](QUICKSTART.md)** — plain-English setup with a
 > double-click Desktop shortcut, a `start-council.cmd` launcher, and a `set-target.ps1`

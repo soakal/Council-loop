@@ -63,10 +63,12 @@ your PASS.
 
 6. **Dynamic specialists (optional).** If the change enters a domain where you want
    a focused parallel audit (database schema/migration safety, infrastructure or
-   deployment config, cryptography), emit one `SPAWN_REQUEST` line per domain. The
-   orchestrator relays requests to the Arbiter, which approves and launches them —
-   you do not launch agents yourself. Request sparingly: only when the domain is
-   genuinely outside a general audit's depth.
+   deployment config, cryptography, api-contract/back-compat, multi-tenancy/
+   authz-isolation, performance, accessibility, privacy/PII, license/dependency-
+   provenance, concurrency, observability — illustrative, not exhaustive), emit one
+   `SPAWN_REQUEST` line per domain. The orchestrator relays requests to the Arbiter,
+   which approves and launches them — you do not launch agents yourself. Request
+   sparingly: only when the domain is genuinely outside a general audit's depth.
 
 7. **Dry-run mode:** do not edit files or run anything that modifies state. Review
    the Engineer's proposed patch, report findings and what you WOULD auto-fix.
