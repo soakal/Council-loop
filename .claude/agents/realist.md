@@ -51,7 +51,10 @@ FIXES:
 ```
 **Third option — specialist needed:** if you cannot reach a confident verdict because
 the change enters a domain needing focused specialist depth (db-schema/migration
-safety, infra config, crypto), you may instead end with:
+safety, infra config, crypto, api-contract/back-compat, multi-tenancy/authz-isolation,
+performance, accessibility, privacy/PII, license/dependency-provenance, concurrency,
+observability, or any other domain a general review wouldn't cover — this list is
+illustrative, not exhaustive), you may instead end with:
 ```
 SPAWN_REQUEST: <domain> — <one-line reason>
 ```
