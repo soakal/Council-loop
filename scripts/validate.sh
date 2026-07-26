@@ -272,6 +272,26 @@ if [[ "$summary_out" != *"Goal: unknown"* || "$summary_out" != *"Stop reason: ce
   exit 1
 fi
 
+# --- run-summary: no history line carries a verifier field -> no "Verifier:" line ---
+if [[ "$summary_out" == *"Verifier:"* ]]; then
+  echo "Expected no Verifier: line when no history lines carry a verifier field, got: $summary_out" >&2
+  exit 1
+fi
+
+# --- run-summary: one line carries --verifier test_added -> tallied "Verifier:" line appears ---
+python3 "$repo_root/scripts/council_state.py" --root "$tmp_root2" append-history \
+  --cycle 3 \
+  --step 'third cycle step' \
+  --verdict accept \
+  --commit null \
+  --notes 'verifier tally check' \
+  --verifier test_added
+verifier_summary_out="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root2" run-summary --since "2020-01-01T00:00:00Z")"
+if [[ "$verifier_summary_out" != *"Verifier: test_added=1, test_updated=0, no_test=0, fail=0, disabled=0, skipped=0"* ]]; then
+  echo "Expected run-summary to report Verifier: test_added=1 tally, got: $verifier_summary_out" >&2
+  exit 1
+fi
+
 # --- run-summary: future --since (nothing to summarize yet) -> empty stdout, exit 0 ---
 future_out="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root2" run-summary --since "2099-01-01T00:00:00Z")"
 if [[ -n "$future_out" ]]; then

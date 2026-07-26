@@ -28,6 +28,7 @@ REQUIRED_KEYS = (
 REQUIRED_CEILING_KEYS = ("max_cycles", "max_minutes")
 REQUIRED_MODEL_KEYS = ("arbiter", "engineer", "realist")
 MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
+VERIFIER_VERDICTS = ("test_added", "test_updated", "no_test", "fail", "disabled", "skipped")
 
 # Backward-compatible additions: configs written before the Security agent /
 # dynamic-spawning / Verifier features get these defaults injected rather than
@@ -397,6 +398,8 @@ def cmd_run_summary(args: argparse.Namespace) -> int:
         return 0
 
     verdict_tally = {"accept": 0, "deferred": 0, "complete": 0}
+    verifier_tally = {value: 0 for value in VERIFIER_VERDICTS}
+    verifier_seen = False
     commits: list[str] = []
     newest = qualifying[0]
     newest_ts = _parse_utc_ts(newest["ts"])
@@ -404,6 +407,10 @@ def cmd_run_summary(args: argparse.Namespace) -> int:
         verdict = item.get("verdict")
         if verdict in verdict_tally:
             verdict_tally[verdict] += 1
+        verifier_verdict = item.get("verifier")
+        if isinstance(verifier_verdict, str) and verifier_verdict in verifier_tally:
+            verifier_tally[verifier_verdict] += 1
+            verifier_seen = True
         commit = item.get("commit")
         if commit:
             commits.append(_clean_text(commit, 100))
@@ -433,10 +440,18 @@ def cmd_run_summary(args: argparse.Namespace) -> int:
         f"Goal: {goal}",
         f"Cycles run: {len(qualifying)}",
         "Verdicts: accept={accept}, deferred={deferred}, complete={complete}".format(**verdict_tally),
+    ]
+    if verifier_seen:
+        lines.append(
+            "Verifier: test_added={test_added}, test_updated={test_updated}, "
+            "no_test={no_test}, fail={fail}, disabled={disabled}, "
+            "skipped={skipped}".format(**verifier_tally)
+        )
+    lines.extend([
         f"Commits: {', '.join(commits) if commits else 'none'}",
         f"Last step: {_clean_text(newest.get('step'), 200)}",
         f"Stop reason: {stop_reason}",
-    ]
+    ])
     print("\n".join(lines))
     return 0
 
@@ -489,7 +504,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     append.add_argument(
         "--verifier",
-        choices=("test_added", "test_updated", "no_test", "fail", "disabled", "skipped"),
+        choices=VERIFIER_VERDICTS,
         help="Verifier (QA) verdict for this cycle (optional, pre-verifier history lines omit it)",
     )
     append.add_argument(
