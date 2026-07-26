@@ -18,9 +18,10 @@ commands, subagents, `/loop`) — **no direct Anthropic API calls, no per-token 
 Any permanent agent can emit `SPAWN_REQUEST: <domain> — <reason>` lines; the Arbiter
 triages requests and approved specialists (db-schema validation, infra scanning, crypto
 review, api-contract/back-compat, multi-tenancy/authz-isolation, performance,
-accessibility, privacy/PII, license/dependency-provenance, concurrency, observability,
-… — illustrative, not exhaustive) launch **in parallel**, read-only, with a per-agent timeout
-(`dynamic_agents.timeout_minutes`; overrun or missing verdict = failure). They exist for
+accessibility, privacy/PII, license/dependency-provenance, concurrency,
+observability — illustrative, not exhaustive) launch **in parallel**, read-only, with
+a per-agent timeout (`dynamic_agents.timeout_minutes`; overrun or missing verdict =
+failure). They exist for
 the current cycle only, report back to the Arbiter before the Realist's final review,
 and every spawn is logged to `.council/state/dynamic-agents.jsonl` (visible in
 `/council-status`). Policy knobs live under `dynamic_agents` in config (`enabled`,
