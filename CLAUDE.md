@@ -99,3 +99,26 @@ overrides them per run. Machine-specific model overrides (e.g. a trial model) be
   Brain server, `brain_events.enabled: false`, or empty `run-summary` output must never change
   `run-loop.ps1`'s exit code or normal exit behavior. There are no retries and no buffering; a dropped
   event is acceptable (`history.jsonl` remains the system of record).
+
+## NEXUS post-mortem trigger (best-effort, driver-only, 2026-07-27)
+
+- `run-loop.ps1` POSTs `{"task_name": "council_postmortem", "parameters": {"since": $runStart}}` to
+  NEXUS's `POST /api/trigger` at driver exit, so NEXUS independently re-verifies the Realist's claims
+  for this run (git log/diff/cat-file over `target_repo` + one Haiku extraction call — see NEXUS's own
+  `CLAUDE.md`/`backend/agents/council_postmortem.py` for what the check actually does).
+- **One call per driver run, never per cycle** — same convergence point as the Brain event above (the
+  single spot after the `for` loop that every exit path reaches), in its own separate `try/catch` so a
+  down Brain server can't skip this call or vice versa. Fires here, not on a schedule, because `/goal`
+  TRUNCATES `.council/state/history.jsonl` on the *next* session — a scheduled poller that missed the
+  window would lose that session's history permanently.
+- **Auth is `$env:NEXUS_API_KEY`** (optionally `$env:NEXUS_BASE_URL`, default `http://127.0.0.1:8000`) —
+  a machine-level environment variable, never written into any tracked or `config.local.json` file. Set
+  once with `[Environment]::SetEnvironmentVariable("NEXUS_API_KEY", "<key>", "User")`. Unset is not an
+  error: the block logs `"council post-mortem skipped: NEXUS_API_KEY not set"` and does nothing else —
+  the feature is simply inert until that one manual step happens.
+- **Manual `/council-cycle` invocations never trigger this** — same documented limitation as the Brain
+  event loopback, for the same reason (`history.jsonl` is only meaningful read at driver-exit time).
+- **Best-effort, never fatal, 120s timeout.** `/api/trigger` runs the post-mortem synchronously, so the
+  timeout is generous on purpose (the driver run is already over — nothing else is blocked by waiting).
+  A down NEXUS, a rotated/missing key (401), or the endpoint's rate limit (429) all degrade to one
+  logged skip line, exactly like a Brain-server outage does for the event loopback above.
