@@ -131,15 +131,20 @@ script under `scripts/hooks/` rather than an inline command, so they're directly
 - History lines now carry optional `security`, `verifier`, and `dynamic` fields; pre-upgrade lines without them stay valid.
 - Portability first: nothing here should hard-code a machine-specific path outside `config.json`.
 
-## Known gap: the drivers haven't caught up to the plugin model yet
+## Drivers operate on a target project, not on their own location
 
-`run-loop.ps1`/`run-loop.sh` (below) still assume they're co-located with `scripts/` and
-loop from their own directory — that predates this plugin conversion and hasn't been
-redesigned yet. Using either driver today still works for developing Council Loop
-against itself (`target_repo: "."` from within this repo, exactly the case the section
-above warns is otherwise unusual), but driving an *arbitrary other* project unattended
-via these scripts needs that redesign first. The sections below describe their current,
-pre-redesign behavior.
+`run-loop.ps1`/`run-loop.sh` (below) still ship alongside `scripts/` — that part of
+their own location never changes, since `scripts/council_state.py` and
+`scripts/postmortem_payload.py` are siblings the driver finds via its own script path
+(`$PSScriptRoot` / `dirname "${BASH_SOURCE[0]}"`) regardless of where it's invoked from.
+What changed for the plugin conversion: the driver's own directory and the **project
+being driven** are two independent things now, never assumed to be the same. Each
+driver takes an explicit target (`-TargetDir`/first positional arg, default: current
+directory) and `cd`s there (or runs `claude` with cwd set there) for every cycle, so
+`.council/` state, `stop.flag`, and the run's own log file all live in the target
+project — never inside wherever this plugin happens to be installed. Both drivers also
+pass `--plugin-dir <their own location>` to every `claude -p` invocation, so the loop
+works whether or not Council Loop is separately installed via a marketplace.
 
 ## Brain event loopback (best-effort, driver-only)
 
@@ -150,8 +155,9 @@ pre-redesign behavior.
 - **One event per driver run, never per cycle.** `run-loop.ps1` captures `$runStart` (UTC ISO-8601)
   before its `for` loop, then — after the loop, at the single point every exit path (pre-cycle
   stop.flag, post-cycle stop.flag, ceiling exhaustion) converges — runs one `try/catch` block that
-  reads `brain_events` from `python3 scripts/council_state.py effective-config` (stdout only, stderr
-  discarded) and, if enabled, calls `python3 scripts/council_state.py run-summary --since $runStart`.
+  reads `brain_events` from `python3 scripts/council_state.py --root <target project> effective-config`
+  (stdout only, stderr discarded) and, if enabled, calls `python3 scripts/council_state.py --root
+  <target project> run-summary --since $runStart`.
   A non-empty result becomes the event body (`event-council-loop-run-complete-<ts>.md`) posted via
   `Invoke-RestMethod` with a 5s timeout; empty output (nothing recorded this run) is a silent no-op.
 - **Manual `/council-cycle` invocations never emit** — only the `run-loop.ps1` driver does, because
@@ -166,8 +172,8 @@ pre-redesign behavior.
 
 ## NEXUS post-mortem trigger (best-effort, driver-only, 2026-07-27)
 
-- Both drivers delegate to `scripts/postmortem_payload.py` at driver exit (`python3 scripts/postmortem_payload.py`,
-  no arguments) rather than each building the request themselves. That one script builds the payload
+- Both drivers delegate to `scripts/postmortem_payload.py` at driver exit (`python3 scripts/postmortem_payload.py
+  --root <target project>`) rather than each building the request themselves. That one script builds the payload
   (`target_repo_name`, `commit_prefix`, `goal`, `history`, `transcripts`, plus a derived git commit range
   with `log`/`files_changed`/`ls_tree_last`/per-file `py_files` diffs — see the script's own docstring) and
   POSTs it to NEXUS's `POST /api/trigger`, so NEXUS independently re-verifies the Realist's claims for this

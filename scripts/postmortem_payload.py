@@ -20,6 +20,7 @@ happens to be on the machine driving the loop.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -28,7 +29,11 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+# Where THIS script's own sibling council_state.py lives -- the plugin's own install
+# location, used only to find that script. Never used to locate .council/ state; that
+# always comes from `root` (the active project, default cwd) below, since Council Loop
+# is a plugin used from wherever you're actually working, not from its own install dir.
+SCRIPT_DIR = Path(__file__).resolve().parents[1]
 _EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 _MAX_PY_FILES = 200
 
@@ -43,10 +48,10 @@ def _git(cwd: str, *args: str, timeout: int = 30) -> str:
     return result.stdout.strip()
 
 
-def _effective_config() -> dict:
-    script = str(ROOT / "scripts" / "council_state.py")
+def _effective_config(root: Path) -> dict:
+    script = str(SCRIPT_DIR / "scripts" / "council_state.py")
     result = subprocess.run(
-        [sys.executable, script, "--root", str(ROOT), "effective-config"],
+        [sys.executable, script, "--root", str(root), "effective-config"],
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
     )
     if result.returncode != 0:
@@ -54,8 +59,8 @@ def _effective_config() -> dict:
     return json.loads(result.stdout)
 
 
-def _read_history() -> list[dict]:
-    path = ROOT / ".council" / "state" / "history.jsonl"
+def _read_history(root: Path) -> list[dict]:
+    path = root / ".council" / "state" / "history.jsonl"
     if not path.exists():
         return []
     items = []
@@ -71,13 +76,13 @@ def _read_history() -> list[dict]:
     return items
 
 
-def _read_goal() -> str:
-    path = ROOT / ".council" / "state" / "goal.md"
+def _read_goal(root: Path) -> str:
+    path = root / ".council" / "state" / "goal.md"
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
-def _read_transcripts() -> str:
-    tdir = ROOT / ".council" / "state" / "transcripts"
+def _read_transcripts(root: Path) -> str:
+    tdir = root / ".council" / "state" / "transcripts"
     if not tdir.exists():
         return ""
     chunks = []
@@ -107,14 +112,16 @@ def _range_expr(target: str, first: str, last: str) -> str:
     return f"{base}..{last}"
 
 
-def build_payload() -> dict:
-    cfg = _effective_config()
+def build_payload(root: Path) -> dict:
+    cfg = _effective_config(root)
     target = cfg["target_repo"]
+    if target == ".":
+        target = str(root)
     commit_prefix = cfg.get("commit_prefix", "council:")
 
-    history = _read_history()
-    goal_text = _read_goal()
-    transcripts = _read_transcripts()
+    history = _read_history(root)
+    goal_text = _read_goal(root)
+    transcripts = _read_transcripts(root)
 
     payload = {
         "target_repo_name": Path(target).name,
@@ -172,13 +179,24 @@ def _api_key() -> str | None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--root",
+        default=Path.cwd(),
+        help="Active project root whose .council/ this reads (defaults to the caller's "
+        "cwd, not this script's own location -- Council Loop is a plugin used from "
+        "whatever project you're currently in).",
+    )
+    args = parser.parse_args()
+    root = Path(args.root).resolve()
+
     key = _api_key()
     if not key:
         print("council post-mortem skipped: no NEXUS_API_KEY (env or ~/.config/nexus/api_key)")
         return 0
 
     try:
-        payload = build_payload()
+        payload = build_payload(root)
     except Exception as e:
         print(f"council post-mortem skipped: failed to build payload: {e}")
         return 0

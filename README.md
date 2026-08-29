@@ -171,12 +171,32 @@ Install the plugin there the normal way (`/plugin marketplace add soakal/Council
 there's no folder to move and no per-machine `target_repo` edit, since `target_repo: "."`
 already means "whichever project I'm in," which is true on every machine identically.
 
+### Running it unattended
+
+`run-loop.ps1`/`run-loop.sh` loop `claude -p "/council-cycle"` against a **target
+project**, which is never assumed to be the same directory the driver script itself
+lives in:
+
+```powershell
+.\run-loop.ps1 -TargetDir "C:\path\to\your\project" -MaxIterations 50
+```
+```bash
+./run-loop.sh /path/to/your/project 50
+```
+
+Both default `TargetDir` to the current directory and `MaxIterations` to 120 if
+omitted, `cd` into the target for every cycle (so `.council/`, `stop.flag`, and the
+run's own log file all live there, never inside this plugin's own install location),
+and pass `--plugin-dir <their own location>` to every `claude -p` call so the loop
+works whether or not Council Loop is separately installed via a marketplace.
+
 > **Legacy launchers, not yet updated for the plugin model:** `start-council.cmd`,
 > `start-council.sh`, `set-target.ps1`, and `set-target.sh` all predate this conversion —
 > they assumed the whole toolkit and the project being worked on were the same folder,
 > which is no longer how this works. They still exist in this repo but don't reflect the
 > plugin-based flow above; treat them as pending a redesign, not as the current
-> recommended path.
+> recommended path. (`run-loop.ps1`/`run-loop.sh` above have already been redesigned —
+> this note is about the other four.)
 
 ## Layout
 
@@ -208,11 +228,9 @@ start-council.cmd  # legacy pre-plugin launcher -- see note above
 start-council.sh   # legacy pre-plugin launcher -- see note above
 set-target.ps1     # legacy pre-plugin launcher -- see note above
 set-target.sh      # legacy pre-plugin launcher -- see note above
-run-loop.ps1       # unattended Windows driver (loops /council-cycle until stop.flag) --
-                   # still assumes co-location with scripts/, not yet updated for the
-                   # plugin model either; works for self-hosting, not yet for driving an
-                   # arbitrary other project unattended
-run-loop.sh        # unattended Linux/macOS driver equivalent, same caveat
+run-loop.ps1       # unattended Windows driver -- loops /council-cycle against a
+                   # -TargetDir project (default: cwd), never against its own location
+run-loop.sh        # unattended Linux/macOS driver equivalent
 ```
 
 ## Skill authoring mid-run
