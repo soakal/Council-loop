@@ -57,7 +57,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["enabled", "max_parallel", "timeout_minutes"],
-      "description": "Policy for temporary per-cycle specialist agents. Optional; defaults to {enabled: true, max_parallel: 4, timeout_minutes: 10} when omitted.",
+      "description": "Policy for temporary per-cycle specialist agents. Optional; defaults to {enabled: false, max_parallel: 4, timeout_minutes: 10} when omitted -- opt in per goal once a run actually needs a specialist domain.",
       "properties": {
         "enabled": { "type": "boolean" },
         "max_parallel": { "type": "integer", "minimum": 1 },

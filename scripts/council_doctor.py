@@ -49,6 +49,7 @@ def main() -> int:
 
     required = [
         ".council/config.json",
+        ".council/config.example.json",
         ".council/config.schema.json",
         ".claude/commands/goal.md",
         ".claude/commands/council-cycle.md",
@@ -56,6 +57,8 @@ def main() -> int:
         ".claude/commands/council-doctor.md",
         ".claude/commands/council-repair.md",
         ".claude/commands/council-rollback.md",
+        ".claude/commands/forge-skill.md",
+        ".claude/commands/stop.md",
         ".claude/agents/arbiter.md",
         ".claude/agents/engineer.md",
         ".claude/agents/security.md",
@@ -65,6 +68,13 @@ def main() -> int:
         "scripts/council_state.py",
         "scripts/discover_tests.py",
         "scripts/validate.sh",
+        "scripts/postmortem_payload.py",
+        "start-council.cmd",
+        "start-council.sh",
+        "set-target.ps1",
+        "set-target.sh",
+        "run-loop.ps1",
+        "run-loop.sh",
     ]
     for rel in required:
         path = root / rel

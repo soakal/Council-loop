@@ -23,10 +23,14 @@ required_files=(
   "$repo_root/scripts/council_doctor.py"
   "$repo_root/scripts/council_state.py"
   "$repo_root/scripts/discover_tests.py"
+  "$repo_root/scripts/validate.sh"
+  "$repo_root/scripts/postmortem_payload.py"
   "$repo_root/start-council.cmd"
   "$repo_root/start-council.sh"
   "$repo_root/set-target.ps1"
   "$repo_root/set-target.sh"
+  "$repo_root/run-loop.ps1"
+  "$repo_root/run-loop.sh"
 )
 
 for path in "${required_files[@]}"; do

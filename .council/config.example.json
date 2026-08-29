@@ -20,7 +20,7 @@
   "auto_commit": true,
   "commit_prefix": "council:",
   "dynamic_agents": {
-    "enabled": true,
+    "enabled": false,
     "max_parallel": 4,
     "timeout_minutes": 10
   },

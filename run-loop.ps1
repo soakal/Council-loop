@@ -88,32 +88,17 @@ Powered by CwiAI
 }
 
 # Best-effort NEXUS council post-mortem trigger: ONE call per driver run, here
-# because /goal TRUNCATES .council/state/history.jsonl on the next session --
-# NEXUS must read this session's history before that happens. Separate
-# try/catch from the Brain block above on purpose: a down Brain server must
-# not skip this. Never throws; never changes this driver's exit code.
+# because /goal archives .council/state/history.jsonl into a timestamped
+# folder on the next session -- NEXUS must read this session's history before
+# that happens. Separate try/catch from the Brain block above on purpose: a
+# down Brain server must not skip this. Delegates entirely to
+# scripts/postmortem_payload.py (stdlib Python, runs identically on Windows)
+# so both drivers share one payload contract instead of drifting -- see that
+# script's own docstring for the raw-git-data shape NEXUS now expects. Never
+# throws; never changes this driver's exit code.
 try {
-    $nexusKey = $env:NEXUS_API_KEY
-    if (-not $nexusKey) {
-        Write-Log "council post-mortem skipped: NEXUS_API_KEY not set (set it once with [Environment]::SetEnvironmentVariable('NEXUS_API_KEY','<key>','User'))"
-    } else {
-        $nexusUrl = if ($env:NEXUS_BASE_URL) { $env:NEXUS_BASE_URL } else { "http://127.0.0.1:8000" }
-        $triggerBody = @{
-            task_name  = "council_postmortem"
-            parameters = @{ since = $runStart }
-        } | ConvertTo-Json
-        # 120s, not 5s: /api/trigger runs the post-mortem SYNCHRONOUSLY (git
-        # log/diff/cat-file over the target repo + one Haiku call), so a short
-        # timeout would abort the client while the server keeps working and
-        # log a misleading failure. The run is already over -- nothing is
-        # blocked by waiting.
-        $pm = Invoke-RestMethod -Method Post -Uri "$nexusUrl/api/trigger" `
-            -ContentType "application/json" -TimeoutSec 120 `
-            -Headers @{ Authorization = "Bearer $nexusKey" } -Body $triggerBody
-        $findings = 0
-        if ($pm.result -and $pm.result.findings) { $findings = @($pm.result.findings).Count }
-        Write-Log "council post-mortem: ok=$($pm.result.ok) findings=$findings"
-    }
+    $postmortemOutput = (& python3 (Join-Path $PSScriptRoot "scripts\postmortem_payload.py") 2>&1 | Out-String).Trim()
+    Write-Log $postmortemOutput
 } catch {
     Write-Log "council post-mortem skipped: $_"
 }

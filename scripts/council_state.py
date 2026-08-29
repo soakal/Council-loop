@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import sys
@@ -35,9 +36,13 @@ MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
 # verifier are validated when present.
 DEFAULT_SECURITY_MODEL = "sonnet"
 DEFAULT_VERIFIER_MODEL = "sonnet"
-DEFAULT_DYNAMIC_AGENTS = {"enabled": True, "max_parallel": 4, "timeout_minutes": 10}
+DEFAULT_DYNAMIC_AGENTS = {"enabled": False, "max_parallel": 4, "timeout_minutes": 10}
 DEFAULT_VERIFIER = {"enabled": True, "max_test_files": 2}
 DEFAULT_BRAIN_EVENTS = {"enabled": True, "url": "http://127.0.0.1:8765"}
+
+# A held cycle.lock older than this is assumed to belong to a crashed/killed prior
+# invocation rather than a live one, and begin-cycle reclaims it automatically.
+STALE_LOCK_MINUTES = 60
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -82,10 +87,19 @@ def load_config(root: Path) -> dict[str, Any]:
         config["models"].setdefault("verifier", DEFAULT_VERIFIER_MODEL)
     if "dynamic_agents" not in config:
         config["dynamic_agents"] = dict(DEFAULT_DYNAMIC_AGENTS)
+    elif isinstance(config["dynamic_agents"], dict):
+        for key, value in DEFAULT_DYNAMIC_AGENTS.items():
+            config["dynamic_agents"].setdefault(key, value)
     if "verifier" not in config:
         config["verifier"] = dict(DEFAULT_VERIFIER)
+    elif isinstance(config["verifier"], dict):
+        for key, value in DEFAULT_VERIFIER.items():
+            config["verifier"].setdefault(key, value)
     if "brain_events" not in config:
         config["brain_events"] = dict(DEFAULT_BRAIN_EVENTS)
+    elif isinstance(config["brain_events"], dict):
+        for key, value in DEFAULT_BRAIN_EVENTS.items():
+            config["brain_events"].setdefault(key, value)
     validate_config(config)
     return config
 
@@ -213,6 +227,68 @@ def cmd_history_count(args: argparse.Namespace) -> int:
     print(len(history))
     if invalid:
         print(f"warning: ignored {invalid} invalid history line(s)", file=sys.stderr)
+    return 0
+
+
+def cmd_begin_cycle(args: argparse.Namespace) -> int:
+    """Atomically claim the next cycle number by creating .council/state/cycle.lock.
+    Prints the claimed cycle number on success. A lock older than STALE_LOCK_MINUTES
+    is assumed to be crashed-process debris and is reclaimed automatically; a fresh
+    lock means another invocation is genuinely running, and this exits non-zero
+    without touching anything."""
+    root = Path(args.root).resolve()
+    state_dir = root / ".council" / "state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = state_dir / "cycle.lock"
+    history, _ = iter_history(state_dir / "history.jsonl")
+    next_cycle = len(history) + 1
+
+    def write_lock() -> None:
+        payload = {
+            "pid": os.getpid(),
+            "cycle": next_cycle,
+            "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload))
+
+    try:
+        write_lock()
+    except FileExistsError:
+        existing: dict[str, Any] = {}
+        age_min: float | None = None
+        try:
+            existing = json.loads(lock_path.read_text(encoding="utf-8"))
+            age_min = (datetime.now(timezone.utc) - _parse_utc_ts(existing["ts"])).total_seconds() / 60
+        except (OSError, json.JSONDecodeError, KeyError, ValueError):
+            pass
+        if age_min is not None and age_min < STALE_LOCK_MINUTES:
+            print(
+                f"cycle lock held by pid {existing.get('pid', '?')} for cycle "
+                f"{existing.get('cycle', '?')} since {existing.get('ts', '?')} "
+                f"({age_min:.0f}m ago) -- another /council-cycle invocation appears to be "
+                f"running. If it isn't, delete {lock_path} manually and retry.",
+                file=sys.stderr,
+            )
+            return 1
+        # Missing/unreadable/stale -- assume a crashed or killed prior invocation.
+        lock_path.unlink(missing_ok=True)
+        try:
+            write_lock()
+        except FileExistsError:
+            print(f"cycle lock at {lock_path} is contended -- try again", file=sys.stderr)
+            return 1
+
+    print(next_cycle)
+    return 0
+
+
+def cmd_end_cycle(args: argparse.Namespace) -> int:
+    """Release the cycle.lock claimed by begin-cycle. Always succeeds, even if no
+    lock is held, so a cleanup call is never itself a new failure mode."""
+    root = Path(args.root).resolve()
+    (root / ".council" / "state" / "cycle.lock").unlink(missing_ok=True)
     return 0
 
 
@@ -475,6 +551,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     count = subparsers.add_parser("history-count")
     count.set_defaults(func=cmd_history_count)
+
+    begin = subparsers.add_parser("begin-cycle")
+    begin.set_defaults(func=cmd_begin_cycle)
+
+    end = subparsers.add_parser("end-cycle")
+    end.set_defaults(func=cmd_end_cycle)
 
     append = subparsers.add_parser("append-history")
     append.add_argument("--cycle", required=True, type=int)

@@ -1,10 +1,7 @@
 # Council Loop runtime state (regenerated each run — not source)
-.council/state/goal.md
-.council/state/history.jsonl
-.council/state/history.jsonl.bak-*
-.council/state/stop.flag
-.council/state/transcripts/
-run-loop-*.log
+.council/state/*
+!.council/state/.gitkeep
+run-loop-*.log*
 
 # Local overrides
 .council/config.local.json

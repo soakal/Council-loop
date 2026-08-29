@@ -103,7 +103,7 @@ and the git-safety guards are still hard stops — `/goal` is the full reset pat
 | `open_pr` | If `true`, accepted committed cycles print PR-ready handoff details for wrappers/users to open a PR. |
 | `transcripts` | If `true`, each cycle writes a readable transcript under `.council/state/transcripts/`. |
 | `test_commands` | Optional explicit verification commands. Leave empty to auto-discover common test commands. |
-| `auto_commit` | On ACCEPT: `true` runs the artifact guard, stages, and commits. `false` runs the same artifact guard and stages the changes but does not commit — history records `"commit": null`. |
+| `auto_commit` | On ACCEPT: `true` stages exactly the paths the Engineer/Security/Verifier reported this cycle and commits. `false` stages those same paths but does not commit — history records `"commit": null`. Either way, any other path sitting in the tree (never `git add -A`) blocks the cycle as `deferred` instead of being swept in. |
 | `commit_prefix` | Prefix for council commit messages (default `council:`). |
 | `verifier` | Policy for the QA role: `{"enabled": true, "max_test_files": 2}`. Set `enabled: false` for docs-only or non-code goals so a cycle doesn't spend a seat on it; `max_test_files` caps how many test files one cycle may touch. Optional — defaults injected when the key is absent. |
 | `config.local.json` | Optional, gitignored, per-machine override file living beside `config.json` (`.council/config.local.json`). Any keys it sets win over `config.json`, merged recursively — a partial nested object like `{"ceiling": {"max_cycles": 20}}` overrides just that leaf and leaves `max_minutes` (and everything else) at `config.json`'s value. `set-target.ps1` and `set-target.sh` write to this file instead of the tracked `config.json`. |
@@ -122,15 +122,21 @@ silently read the wrong `.council/`.
 To run the council against a repo you don't have locally: clone it, set `target_repo` to
 its path. The council commits into **that** repo's history.
 
-Two safety guards run before the first cycle: the target must be a **git repository**, and
-its working tree must be **clean** (commit or stash your own work first) — otherwise the
-council's auto-commit could sweep your uncommitted changes into its commits.
+Two safety guards run before **every** cycle, not just the first: the target must be a
+**git repository**, and its working tree must be **clean** (commit or stash your own work
+first) — with one carve-out, the exact staged-but-uncommitted state a prior cycle left
+behind under `auto_commit:false` is recognized and allowed to continue. Anything else
+(your own uncommitted work, or orphaned edits from a crashed/killed prior run) stops the
+loop with `stop.flag` instead of risking a silent sweep. The commit step itself (§5) is a
+second, narrower layer of the same protection: it only ever stages the exact paths the
+Engineer/Security/Verifier reported that cycle — never `git add -A` — so even if something
+unexpected slipped past the pre-run guard mid-cycle, it still can't reach a commit.
 
-> **Tip:** give `target_repo` a proper `.gitignore`. As a safety net the commit step
-> skips **untracked** paths matching common regenerable-artifact patterns
-> (`__pycache__/`, `node_modules/`, `dist/`, `.venv/`, `*.log`, …) and warns you to
-> gitignore them — already-tracked paths that happen to match are committed normally —
-> but the target's own `.gitignore` is the real fix.
+> **Tip:** give `target_repo` a proper `.gitignore`. As a safety net, an **untracked** path
+> matching a common regenerable-artifact pattern (`__pycache__/`, `node_modules/`, `dist/`,
+> `.venv/`, `*.log`, …) that no role reported this cycle is quietly ignored rather than
+> blocking the loop; anything else unreported blocks it. The target's own `.gitignore` is
+> still the real fix.
 
 ## Reliability commands
 

@@ -7,6 +7,8 @@
 set -u
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
+export CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0
+
 MAX_ITERATIONS="${1:-120}"
 TIMESTAMP="$(date -u +%Y%m%d-%H%M%S)"
 LOG_FILE="run-loop-${TIMESTAMP}.log"
@@ -19,6 +21,7 @@ log() {
 
 log "=== Council Loop driver starting (max $MAX_ITERATIONS cycles) ==="
 log "Log file: $LOG_FILE"
+log "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 (wait indefinitely for background tasks -- avoids the 600s kill that once interrupted a run; same fix as run-loop.ps1)"
 
 for ((i = 1; i <= MAX_ITERATIONS; i++)); do
     if [ -f "$STOP_FLAG" ]; then

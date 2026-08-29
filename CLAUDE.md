@@ -21,8 +21,10 @@ triages requests and approved specialists (db-schema validation, infra scanning,
 review, api-contract/back-compat, multi-tenancy/authz-isolation, performance,
 accessibility, privacy/PII, license/dependency-provenance, concurrency,
 observability — illustrative, not exhaustive) launch **in parallel**, read-only, with
-a per-agent timeout (`dynamic_agents.timeout_minutes`; overrun or missing verdict =
-failure). They exist for
+a per-agent timeout (`dynamic_agents.timeout_minutes`) enforced by actually terminating
+(`TaskStop`) any agent that overruns its own budget rather than merely detecting the
+overrun once it happens to return — overrun or missing verdict = failure either way. They
+exist for
 the current cycle only, report back to the Arbiter before the Realist's final review,
 and every spawn is logged to `.council/state/dynamic-agents.jsonl` (visible in
 `/council-status`). Policy knobs live under `dynamic_agents` in config (`enabled`,
@@ -62,7 +64,7 @@ overrides them per run. Machine-specific model overrides (e.g. a trial model) be
 
 - **`target_repo`** is where all edits and commits land. `"."` means *this* project directory (self-hosting / demo); for real work point it at another repo's absolute path.
 - **Ceiling replaces the old cost cap:** the cycle stops at `max_cycles` OR `max_minutes`, whichever comes first — this is the subscription-model equivalent of the PowerShell dollar ceiling.
-- **Pre-run guards:** `target_repo` must be a git repository, and on the first cycle its working tree must be clean — so `git add -A` never sweeps the user's own uncommitted work into a council commit. Either failure writes `stop.flag`.
+- **Pre-run guards:** `target_repo` must be a git repository. On **every** cycle (not just the first), TARGET's working tree must be clean before the Arbiter plans — or, under `auto_commit:false`, contain only the fully-staged, not-yet-committed result of the prior cycle's ACCEPT; anything else (the user's own uncommitted work, orphaned residue from a crashed prior cycle) writes `stop.flag` rather than silently building on top of it. Either guard failing writes `stop.flag`. The commit step (§5) is a second, narrower layer of the same protection: it only ever stages the exact paths the Engineer/Security/Verifier reported that cycle — never `git add -A` — so even if something unexpected slips past the pre-run guard mid-cycle, it still can't get swept into the commit.
 - **One step per cycle.** The Engineer must not scope-creep; the Realist defaults to `REVISE` when unsure.
 - **Coverage is the Verifier's job, not the Engineer's.** The Engineer implements the step;
   the Verifier adds the regression test in the same cycle. Don't plan separate "add a test
@@ -102,20 +104,32 @@ overrides them per run. Machine-specific model overrides (e.g. a trial model) be
 
 ## NEXUS post-mortem trigger (best-effort, driver-only, 2026-07-27)
 
-- `run-loop.ps1` POSTs `{"task_name": "council_postmortem", "parameters": {"since": $runStart}}` to
-  NEXUS's `POST /api/trigger` at driver exit, so NEXUS independently re-verifies the Realist's claims
-  for this run (git log/diff/cat-file over `target_repo` + one Haiku extraction call — see NEXUS's own
-  `CLAUDE.md`/`backend/agents/council_postmortem.py` for what the check actually does).
+- Both drivers delegate to `scripts/postmortem_payload.py` at driver exit (`python3 scripts/postmortem_payload.py`,
+  no arguments) rather than each building the request themselves. That one script builds the payload
+  (`target_repo_name`, `commit_prefix`, `goal`, `history`, `transcripts`, plus a derived git commit range
+  with `log`/`files_changed`/`ls_tree_last`/per-file `py_files` diffs — see the script's own docstring) and
+  POSTs it to NEXUS's `POST /api/trigger`, so NEXUS independently re-verifies the Realist's claims for this
+  run (deterministic checks + one Haiku extraction call — see NEXUS's own `CLAUDE.md`/
+  `backend/agents/council_postmortem.py` for what the check actually does). One implementation shared by
+  `run-loop.ps1` and `run-loop.sh` so the payload contract can't drift between the two drivers — the old
+  design had `run-loop.ps1` POST a bare `{"since": ...}` and let NEXUS read Council-loop's git history off
+  local disk itself, which stopped working once NEXUS moved to nexus-lxc while Council-loop stays on
+  whichever machine is actually running it.
 - **One call per driver run, never per cycle** — same convergence point as the Brain event above (the
-  single spot after the `for` loop that every exit path reaches), in its own separate `try/catch` so a
-  down Brain server can't skip this call or vice versa. Fires here, not on a schedule, because `/goal`
-  TRUNCATES `.council/state/history.jsonl` on the *next* session — a scheduled poller that missed the
-  window would lose that session's history permanently.
-- **Auth is `$env:NEXUS_API_KEY`** (optionally `$env:NEXUS_BASE_URL`, default `http://127.0.0.1:8000`) —
-  a machine-level environment variable, never written into any tracked or `config.local.json` file. Set
-  once with `[Environment]::SetEnvironmentVariable("NEXUS_API_KEY", "<key>", "User")`. Unset is not an
-  error: the block logs `"council post-mortem skipped: NEXUS_API_KEY not set"` and does nothing else —
-  the feature is simply inert until that one manual step happens.
+  single spot after the `for` loop that every exit path reaches), in its own separate `try`/`catch` (or
+  bash equivalent) so a down Brain server can't skip this call or vice versa. Fires here, not on a
+  schedule, because `/goal` MOVES `.council/state/history.jsonl` into a timestamped folder under
+  `.council/state/archive/` on the *next* session (see `/goal`'s own spec) rather than leaving it at a
+  fixed path — the data survives, but a scheduled poller watching that fixed path would still miss the
+  window and never find this session's history at all.
+- **Auth is `NEXUS_API_KEY`** (an environment variable; `postmortem_payload.py` also falls back to
+  `~/.config/nexus/api_key` if the env var is unset), optionally `NEXUS_BASE_URL` (default
+  `https://nexus-lxc.tailfa52c.ts.net` — NEXUS runs on the LXC now, not co-located with wherever this
+  driver runs) — a machine-level setting, never written into any tracked or `config.local.json` file. Set
+  the env var once with `[Environment]::SetEnvironmentVariable("NEXUS_API_KEY", "<key>", "User")` on
+  Windows, or an export in your shell profile on Linux/macOS. Neither set is not an error: the script
+  prints `"council post-mortem skipped: no NEXUS_API_KEY (env or ~/.config/nexus/api_key)"` and exits 0 —
+  the feature is simply inert until one of those two is set.
 - **Manual `/council-cycle` invocations never trigger this** — same documented limitation as the Brain
   event loopback, for the same reason (`history.jsonl` is only meaningful read at driver-exit time).
 - **Best-effort, never fatal, 120s timeout.** `/api/trigger` runs the post-mortem synchronously, so the
