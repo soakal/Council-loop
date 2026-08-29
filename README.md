@@ -33,10 +33,8 @@ privacy/PII, license, concurrency, observability, … — illustrative, not exha
 that run in parallel with a per-agent timeout; every spawn is logged and shown in
 `/council-status`.
 
-> **QUICKSTART.md is currently stale** — it documents the pre-plugin, copy-the-folder
-> setup (a Desktop shortcut, `start-council.cmd`, `set-target.ps1`). That workflow no
-> longer applies now that Council Loop is a plugin; a rewritten, plain-English quickstart
-> for the plugin-install flow is still pending. Follow the **Quick start** below instead.
+> **New here? Read [QUICKSTART.md](QUICKSTART.md)** — plain-English setup for the
+> plugin-install flow. The rest of this file is the fuller reference.
 
 ## Quick start
 
@@ -237,7 +235,7 @@ scripts/
   postmortem_payload.py  # gathers raw git data for NEXUS's post-mortem trigger
   hooks/                 # scripts backing hooks/hooks.json
 CLAUDE.md          # project memory / rules for the loop
-QUICKSTART.md      # plain-English getting-started guide (currently stale -- see note above)
+QUICKSTART.md      # plain-English getting-started guide
 start-council.cmd  # optional launcher: opens Claude Code in a target project with
                    # this plugin's local copy loaded (--plugin-dir)
 start-council.sh   # optional launcher equivalent
