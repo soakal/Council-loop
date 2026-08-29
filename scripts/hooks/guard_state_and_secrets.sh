@@ -33,7 +33,7 @@ blob="$(printf '%s' "$payload" | jq -r '
   | join("\n")
 ')"
 
-if printf '%s' "$blob" | grep -qE 'NEXUS_API_KEY[[:space:]]*[:=][[:space:]]*.|https?://[A-Za-z0-9.-]*\.ts\.net|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]{1,3}\.[0-9]{1,3}'; then
+if printf '%s' "$blob" | grep -qE 'NEXUS_API_KEY[[:space:]]*[:=][[:space:]]*.|https?://[A-Za-z0-9.-]*\.ts\.net|https?://100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]{1,3}\.[0-9]{1,3}'; then
   if [ -n "$file_path" ] && git ls-files --error-unmatch -- "$file_path" >/dev/null 2>&1; then
     deny 'Refusing to write a NEXUS_API_KEY value or a Tailscale-style host/IP literal into a git-tracked file. Machine-specific secrets/URLs belong in .council/config.local.json (gitignored), never a tracked file.'
   fi

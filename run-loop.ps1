@@ -3,7 +3,7 @@ param(
     [int]$MaxIterations = 120
 )
 
-# Unattended driver for Windows -- loops `claude -p "/council-cycle"` against a TARGET
+# Unattended driver for Windows -- loops `claude -p "/council-loop:council-cycle"` against a TARGET
 # PROJECT until stop.flag appears or MaxIterations is hit, then (best-effort, never
 # affecting this script's exit code) emits one Brain run-complete event and triggers
 # NEXUS's council post-mortem via scripts\postmortem_payload.py.
@@ -57,7 +57,7 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     }
 
     Write-Log "--- Starting cycle $i ---"
-    $output = & claude -p "/council-cycle" --plugin-dir $PluginDir 2>&1 | Out-String
+    $output = & claude -p "/council-loop:council-cycle" --plugin-dir $PluginDir 2>&1 | Out-String
     Write-Log $output
 
     if (Test-Path $stopFlagPath) {
@@ -129,5 +129,6 @@ try {
     Write-Log "council post-mortem skipped: $_"
 }
 
-Write-Log "=== Council Loop driver ended (ran up to $i of $MaxIterations cycles) ==="
-Write-Log "Check .council\state\history.jsonl (in the target project) for the full cycle-by-cycle record."
+$cyclesRun = [Math]::Min($i, $MaxIterations)
+Write-Log "=== Council Loop driver ended (ran up to $cyclesRun of $MaxIterations cycles) ==="
+Write-Log "Check $TargetDir\.council\state\history.jsonl for the full cycle-by-cycle record."

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Unattended driver for Linux/macOS -- loops `claude -p "/council-cycle"` against a
+# Unattended driver for Linux/macOS -- loops `claude -p "/council-loop:council-cycle"` against a
 # TARGET PROJECT until stop.flag appears or MAX_ITERATIONS is hit, then (best-effort,
 # never affecting this script's exit code) emits one Brain run-complete event and
 # triggers NEXUS's council post-mortem via scripts/postmortem_payload.py.
@@ -50,7 +50,7 @@ for ((i = 1; i <= MAX_ITERATIONS; i++)); do
     fi
 
     log "--- Starting cycle $i ---"
-    output="$(cd "$TARGET_DIR" && claude -p "/council-cycle" --plugin-dir "$PLUGIN_DIR" 2>&1)"
+    output="$(cd "$TARGET_DIR" && claude -p "/council-loop:council-cycle" --plugin-dir "$PLUGIN_DIR" 2>&1)"
     log "$output"
 
     if [ -f "$STOP_FLAG" ]; then
@@ -106,10 +106,14 @@ except Exception as e:
             fi
         fi
     fi
-} 2>&1 | tee -a "$LOG_FILE" || log "brain event emit skipped (unexpected error)"
+} || log "brain event emit skipped (unexpected error)"
 
 # Best-effort NEXUS council post-mortem trigger -- ONE call per driver run,
 # separate try/catch equivalent from the Brain block above on purpose: a down
 # Brain server must not skip this.
 postmortem_output="$(python3 "$PLUGIN_DIR/scripts/postmortem_payload.py" --root "$TARGET_DIR" 2>&1)"
 log "$postmortem_output"
+
+cycles_run=$(( i > MAX_ITERATIONS ? MAX_ITERATIONS : i ))
+log "=== Council Loop driver ended (ran up to $cycles_run of $MAX_ITERATIONS cycles) ==="
+log "Check $TARGET_DIR/.council/state/history.jsonl for the full cycle-by-cycle record."

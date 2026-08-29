@@ -8,7 +8,9 @@ Run **one** iteration of the council loop, then finish (do NOT loop yourself —
 
 Pipeline: **Arbiter → Engineer → Security → Verifier → (dynamic agents, if requested) → Realist → commit gate.**
 
-Paths below are relative to this Council Loop project directory.
+Paths below (`.council/...`, `stop.flag`, etc.) are relative to the current project —
+never to wherever this plugin itself is installed. Script invocations use
+`${CLAUDE_PLUGIN_ROOT}` explicitly for exactly that reason.
 
 ## 0. Preflight
 - Load and validate the effective config first: run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/council_state.py effective-config` (Council Loop is a plugin; its `.council/` state belongs to the current project — the directory you're actually working in — never to wherever the plugin itself is installed). If it fails, write `stop.flag` = the helper's `invalid council config: <brief reason>` message, print it, and STOP. If there is no `.council/config.json` yet in the current project, tell the user to run `/goal` first (it bootstraps one) and STOP. Use the helper's JSON output as `config`. Resolve **TARGET** = `config.target_repo`; if it is `"."`, TARGET is the current project directory. **All code changes and commits happen in TARGET.**

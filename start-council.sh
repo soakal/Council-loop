@@ -60,8 +60,8 @@ echo "  Project : $project_dir"
 echo "  Target  : $target"
 echo "  Plugin  : $plugin_dir"
 echo
-echo "  Next:  /goal <objective>. Acceptance: <criteria>"
-echo "         /loop /council-cycle"
+echo "  Next:  /council-loop:goal <objective>. Acceptance: <criteria>"
+echo "         /loop /council-loop:council-cycle"
 echo
 
 if ! command -v claude >/dev/null 2>&1; then

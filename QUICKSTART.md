@@ -12,6 +12,9 @@ your Claude Code subscription, so there are **no extra bills**.
 Council Loop is a **Claude Code plugin**: you install it once, then use it from *any*
 project — it doesn't live inside one special folder anymore.
 
+**You'll need:** `git`, `python3`, and `jq` on your machine (in addition to Claude Code
+itself) — `/council-doctor` checks for all three.
+
 ---
 
 ## ⚡ The short version
@@ -153,9 +156,11 @@ from the marketplace.)*
 
 ## 🆘 If something seems off
 
-- **The `/goal` or `/loop` commands aren't recognized?** Confirm the plugin is installed
-  (`/plugin` lists it) and enabled for this session, then reopen Claude Code in your
-  project.
+- **`/council-loop:goal` isn't recognized?** Confirm the plugin is installed (`/plugin`
+  lists it) and enabled for this session, then reopen Claude Code in your project.
+- **`/loop` specifically isn't recognized?** It's a separate bundled Claude Code skill,
+  not part of this plugin — if your session doesn't have it, run `./run-loop.sh` (or
+  `.\run-loop.ps1` on Windows) instead of `/loop`; it does the same repeated-cycle job.
 - **It stopped sooner than expected?** It probably hit `max_cycles` or `max_minutes`. Raise
   them in your project's `.council\config.json` and run `/loop /council-cycle` again — as
   long as there's now headroom, it clears the stop on its own and keeps going (no need to

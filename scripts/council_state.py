@@ -43,7 +43,7 @@ DEFAULT_SECURITY_MODEL = "sonnet"
 DEFAULT_VERIFIER_MODEL = "sonnet"
 DEFAULT_DYNAMIC_AGENTS = {"enabled": False, "max_parallel": 4, "timeout_minutes": 10}
 DEFAULT_VERIFIER = {"enabled": True, "max_test_files": 2}
-DEFAULT_BRAIN_EVENTS = {"enabled": True, "url": "http://127.0.0.1:8765"}
+DEFAULT_BRAIN_EVENTS = {"enabled": False, "url": "http://127.0.0.1:8765"}
 
 # A held cycle.lock older than this is assumed to belong to a crashed/killed prior
 # invocation rather than a live one, and begin-cycle reclaims it automatically.
@@ -82,9 +82,10 @@ def load_config(root: Path) -> dict[str, Any]:
         print("config.local.json: applied", file=sys.stderr)
     else:
         print(
-            "WARNING: config.local.json not found -- using tracked config.json "
-            "values only (expected on a fresh clone or git worktree, since the "
-            "file is gitignored and NOT copied into worktrees)",
+            "config.local.json: not present -- using config.json values only "
+            "(normal for a project with no per-machine overrides yet; also "
+            "expected in a git worktree, since the file is gitignored and NOT "
+            "copied into worktrees)",
             file=sys.stderr,
         )
     if isinstance(config.get("models"), dict):

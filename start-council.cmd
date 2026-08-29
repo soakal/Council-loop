@@ -13,6 +13,7 @@ REM  its path as an argument, to target that folder instead.
 REM ============================================================
 
 set "PLUGIN_DIR=%~dp0"
+if "%PLUGIN_DIR:~-1%"=="\" set "PLUGIN_DIR=%PLUGIN_DIR:~0,-1%"
 set "PROJECT_DIR=%~1"
 if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%CD%"
 
@@ -33,8 +34,8 @@ echo   Project : %PROJECT_DIR%
 echo   Target  : %TARGET_REPO%
 echo   Plugin  : %PLUGIN_DIR%
 echo.
-echo   Next:  /goal ^<objective^>. Acceptance: ^<criteria^>
-echo          /loop /council-cycle
+echo   Next:  /council-loop:goal ^<objective^>. Acceptance: ^<criteria^>
+echo          /loop /council-loop:council-cycle
 echo.
 
 where claude >nul 2>&1

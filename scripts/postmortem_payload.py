@@ -29,10 +29,11 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-# Where THIS script's own sibling council_state.py lives -- the plugin's own install
-# location, used only to find that script. Never used to locate .council/ state; that
-# always comes from `root` (the active project, default cwd) below, since Council Loop
-# is a plugin used from wherever you're actually working, not from its own install dir.
+# This plugin's own root -- council_state.py lives at SCRIPT_DIR/scripts/council_state.py,
+# a sibling of THIS script. Used only to find that script. Never used to locate .council/
+# state; that always comes from `root` (the active project, default cwd) below, since
+# Council Loop is a plugin used from wherever you're actually working, not from its own
+# install dir.
 SCRIPT_DIR = Path(__file__).resolve().parents[1]
 _EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 _MAX_PY_FILES = 200
@@ -201,7 +202,7 @@ def main() -> int:
         print(f"council post-mortem skipped: failed to build payload: {e}")
         return 0
 
-    base_url = os.environ.get("NEXUS_BASE_URL", "https://nexus-lxc.tailfa52c.ts.net")
+    base_url = os.environ.get("NEXUS_BASE_URL", "http://127.0.0.1:8000")
     body = json.dumps({"task_name": "council_postmortem", "parameters": payload}).encode("utf-8")
     req = urllib.request.Request(
         f"{base_url}/api/trigger", data=body, method="POST",

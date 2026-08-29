@@ -1,10 +1,11 @@
 # Council Loop — project memory
 
 Council Loop is a **Claude Code plugin** (`.claude-plugin/plugin.json` +
-`.claude-plugin/marketplace.json`, so this repo is installable directly, e.g.
-`claude plugin install <this-repo-url>`, or loaded locally for development with
-`claude --plugin-dir .`), originally a re-implementation of the PowerShell
-`claude-council-loop`. It drives an autonomous **plan → implement → audit → test → review → commit**
+`.claude-plugin/marketplace.json`, so this repo is its own single-plugin marketplace),
+originally a re-implementation of the PowerShell `claude-council-loop`. There is no
+direct-URL install — the real two-step form is `claude plugin marketplace add owner/repo`
+then `claude plugin install council-loop@council-loop-marketplace` (or, for local
+development, `claude --plugin-dir .`). It drives an autonomous **plan → implement → audit → test → review → commit**
 cycle using a five-role council, running entirely on Claude Code primitives (custom
 commands, subagents, `/loop`) — **no direct Anthropic API calls, no per-token billing.**
 
@@ -76,7 +77,10 @@ role; nothing about it changes cycle behavior.
 | `/forge-skill <name> — <behavior>` | Authors a new reusable skill into the current project's `.claude/skills/` mid-run. |
 | `/stop [reason]` | Writes `stop.flag` so the loop halts cleanly at the next cycle boundary. |
 
-**Autonomous run:** `/loop /council-cycle` re-invokes the cycle until a `stop.flag` appears.
+**Autonomous run:** `/loop /council-loop:council-cycle` re-invokes the cycle until a
+`stop.flag` appears. `/loop` itself is a bundled Claude Code skill, not part of this
+plugin — if it isn't available in your session (e.g. bundled skills disabled), use the
+`run-loop.ps1`/`run-loop.sh` drivers instead, which loop the same command without it.
 
 ## State & config
 
@@ -156,9 +160,10 @@ works whether or not Council Loop is separately installed via a marketplace.
 
 ## Brain event loopback (best-effort, driver-only)
 
-- Optional `brain_events` config block (`{"enabled": true, "url": "http://127.0.0.1:8765"}`, defaults
-  injected like `dynamic_agents` when the key is absent from an older config) lets `run-loop.ps1`
-  POST a single summary note to the Brain MCP server (`POST $url/raw`) after a driver run, so the
+- Optional `brain_events` config block (`{"enabled": false, "url": "http://127.0.0.1:8765"}`, defaults
+  injected like `dynamic_agents` when the key is absent from an older config, and **off by default**
+  since this is a personal-infra integration most projects won't have) lets `run-loop.ps1` POST a
+  single summary note to the Brain MCP server (`POST $url/raw`) after a driver run, so the
   02:00 Brain Organizer can fold "a council run happened" into wiki memory.
 - **One event per driver run, never per cycle.** `run-loop.ps1` captures `$runStart` (UTC ISO-8601)
   before its `for` loop, then — after the loop, at the single point every exit path (pre-cycle
@@ -200,8 +205,10 @@ works whether or not Council Loop is separately installed via a marketplace.
   window and never find this session's history at all.
 - **Auth is `NEXUS_API_KEY`** (an environment variable; `postmortem_payload.py` also falls back to
   `~/.config/nexus/api_key` if the env var is unset), optionally `NEXUS_BASE_URL` (default
-  `https://nexus-lxc.tailfa52c.ts.net` — NEXUS runs on the LXC now, not co-located with wherever this
-  driver runs) — a machine-level setting, never written into any tracked or `config.local.json` file. Set
+  `http://127.0.0.1:8000` — a harmless local placeholder; set this to wherever your own NEXUS
+  instance actually runs) — a machine-level setting, never written into any tracked or `config.local.json`
+  file (this repo has no baked-in default hostname; it's personal infra, not something a public plugin
+  should ship pointed at). Set
   the env var once with `[Environment]::SetEnvironmentVariable("NEXUS_API_KEY", "<key>", "User")` on
   Windows, or an export in your shell profile on Linux/macOS. Neither set is not an error: the script
   prints `"council post-mortem skipped: no NEXUS_API_KEY (env or ~/.config/nexus/api_key)"` and exits 0 —

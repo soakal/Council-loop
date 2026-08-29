@@ -30,6 +30,10 @@ required_files=(
   "$repo_root/scripts/postmortem_payload.py"
   "$repo_root/scripts/hooks/validate_after_edit.sh"
   "$repo_root/scripts/hooks/guard_state_and_secrets.sh"
+  "$repo_root/skills/docs-sync/SKILL.md"
+  "$repo_root/skills/loop-log-triage/SKILL.md"
+  "$repo_root/skills/council-loop-status-check/SKILL.md"
+  "$repo_root/LICENSE"
   "$repo_root/start-council.cmd"
   "$repo_root/start-council.sh"
   "$repo_root/set-target.ps1"
@@ -87,12 +91,20 @@ for rel in (
     if "allowed-tools:" not in text:
         raise SystemExit(f"{rel} is missing allowed-tools")
 
+for rel in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", "hooks/hooks.json"):
+    path = root / rel
+    with path.open(encoding="utf-8") as handle:
+        json.load(handle)
+
 print("JSON and command frontmatter checks passed.")
 PY
 
 bash -n "$repo_root/set-target.sh"
 bash -n "$repo_root/start-council.sh"
-python3 -m py_compile "$repo_root/scripts/council_state.py" "$repo_root/scripts/council_doctor.py" "$repo_root/scripts/discover_tests.py"
+bash -n "$repo_root/run-loop.sh"
+bash -n "$repo_root/scripts/hooks/validate_after_edit.sh"
+bash -n "$repo_root/scripts/hooks/guard_state_and_secrets.sh"
+python3 -m py_compile "$repo_root/scripts/council_state.py" "$repo_root/scripts/council_doctor.py" "$repo_root/scripts/discover_tests.py" "$repo_root/scripts/postmortem_payload.py"
 python3 "$repo_root/scripts/discover_tests.py" "$repo_root" >/dev/null
 
 tmp_root="$(mktemp -d)"
@@ -123,10 +135,10 @@ fi
 python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" effective-config >/dev/null
 python3 "$repo_root/scripts/council_doctor.py" --root "$tmp_root" >/dev/null
 
-# --- config.local.json absent: WARNING on stderr, base config unchanged ---
+# --- config.local.json absent: note on stderr, base config unchanged ---
 no_local_stderr="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" effective-config 2>&1 >/dev/null)"
-if [[ "$no_local_stderr" != *"WARNING: config.local.json not found"* ]]; then
-  echo "Expected a config.local.json-not-found WARNING on stderr, got: $no_local_stderr" >&2
+if [[ "$no_local_stderr" != *"config.local.json: not present"* ]]; then
+  echo "Expected a config.local.json-not-present note on stderr, got: $no_local_stderr" >&2
   exit 1
 fi
 
@@ -251,7 +263,7 @@ PY
 python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" write-transcript --cycle 1 --from-json "$payload" >/dev/null
 lookup_commit="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" lookup-commit --cycle 1)"
 if [[ "$lookup_commit" != "abc1234" ]]; then
-  echo "Expected temp lookup commit null, got: $lookup_commit" >&2
+  echo "Expected temp lookup commit abc1234, got: $lookup_commit" >&2
   exit 1
 fi
 history_count="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" history-count)"
@@ -330,7 +342,7 @@ if [[ -z "$malformed_stderr" ]]; then
   exit 1
 fi
 
-# --- run-loop.ps1: parse-check with pwsh/powershell if available; WARNING-only skip otherwise ---
+# --- run-loop.ps1 / set-target.ps1: parse-check with pwsh/powershell if available; WARNING-only skip otherwise ---
 pwsh_bin=""
 if command -v pwsh >/dev/null 2>&1; then
   pwsh_bin="pwsh"
@@ -345,16 +357,18 @@ $errors = $null
 [System.Management.Automation.Language.Parser]::ParseFile($TargetPath, [ref]$null, [ref]$errors) | Out-Null
 if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }
 PS1
-  set +e
-  "$pwsh_bin" -NoProfile -File "$parse_checker" -TargetPath "$repo_root/run-loop.ps1"
-  parse_status=$?
-  set -e
-  if [[ "$parse_status" -ne 0 ]]; then
-    echo "run-loop.ps1 failed PowerShell parse check" >&2
-    exit 1
-  fi
+  for ps1_target in "$repo_root/run-loop.ps1" "$repo_root/set-target.ps1"; do
+    set +e
+    "$pwsh_bin" -NoProfile -File "$parse_checker" -TargetPath "$ps1_target"
+    parse_status=$?
+    set -e
+    if [[ "$parse_status" -ne 0 ]]; then
+      echo "${ps1_target#$repo_root/} failed PowerShell parse check" >&2
+      exit 1
+    fi
+  done
 else
-  echo "WARNING: no pwsh/powershell available in this validate.sh context -- skipping run-loop.ps1 parse check" >&2
+  echo "WARNING: no pwsh/powershell available in this validate.sh context -- skipping .ps1 parse checks" >&2
 fi
 
 echo "Validation passed."

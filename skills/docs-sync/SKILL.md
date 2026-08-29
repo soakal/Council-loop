@@ -6,26 +6,32 @@ allowed-tools: Read, Grep, Glob, Bash
 
 # Docs-sync: catch documentation drift
 
-CLAUDE.md, README.md, and QUICKSTART.md each restate the command table, the five-role
-council, and config keys. All three get edited in lockstep with every real feature (the
-Verifier addition, dynamic agents, and brain events all touched all three) — which means
-any one of them can silently fall behind. This skill is a one-shot **report**, not a fix:
-it tells you what's out of sync so you (or a follow-up edit) can correct it. It never
-edits the docs itself.
+**This audits Council Loop's own docs and source — not the active project's.** CLAUDE.md,
+README.md, and QUICKSTART.md each restate the command table, the five-role council, and
+config keys, all inside *this plugin's own* repo (`${CLAUDE_PLUGIN_ROOT}`). They get
+edited in lockstep with every real feature (the Verifier addition, dynamic agents, and
+brain events all touched all three) — which means any one of them can silently fall
+behind. Every path below is `${CLAUDE_PLUGIN_ROOT}`-anchored on purpose: this check must
+still find the plugin's own files even when invoked from an unrelated active project,
+which is the normal case once Council Loop is installed. This skill is a one-shot
+**report**, not a fix: it tells you what's out of sync so you (or a follow-up edit) can
+correct it. It never edits the docs itself.
 
 ## 1. Build the ground truth
 
-- `ls commands/*.md` → each filename (minus `.md`) is a real `/<name>` command.
-  Read each file's frontmatter `description:` line.
-- `ls agents/*.md` → each is a real subagent. Read each file's own declared role
-  and, if present in its frontmatter or body, its declared model.
-- Read `.council/config.schema.json`'s top-level `properties` keys and its `required`
-  array — this is the authoritative list of config keys, which ones are mandatory, and
-  (from each property's `description`) what they're documented to do.
+- `ls ${CLAUDE_PLUGIN_ROOT}/commands/*.md` → each filename (minus `.md`) is a real
+  `/<name>` command. Read each file's frontmatter `description:` line.
+- `ls ${CLAUDE_PLUGIN_ROOT}/agents/*.md` → each is a real subagent. Read each file's own
+  declared role and, if present in its frontmatter or body, its declared model.
+- Read `${CLAUDE_PLUGIN_ROOT}/.council/config.schema.json`'s top-level `properties` keys
+  and its `required` array — this is the authoritative list of config keys, which ones
+  are mandatory, and (from each property's `description`) what they're documented to do.
 
 ## 2. Check each doc against that ground truth
 
-For **CLAUDE.md**, **README.md**, and **QUICKSTART.md** in turn:
+For `${CLAUDE_PLUGIN_ROOT}/CLAUDE.md`, `${CLAUDE_PLUGIN_ROOT}/README.md`, and
+`${CLAUDE_PLUGIN_ROOT}/QUICKSTART.md` in turn (again: this plugin's own copies, not
+anything in the active project):
 
 - **Command table drift:** does the doc list every command in `commands/`? Does
   it list any command that no longer has a matching file (renamed/deleted)? Does its
@@ -42,7 +48,8 @@ For **CLAUDE.md**, **README.md**, and **QUICKSTART.md** in turn:
 - **Config key drift:** does the doc mention every config key from `config.schema.json`
   that's meaningfully user-facing? Does it claim a key exists that isn't actually in the
   schema? Does a stated default disagree with the schema's `description` or with
-  `scripts/council_state.py`'s `DEFAULT_*` constants (`grep -n "^DEFAULT_" scripts/council_state.py`)?
+  `scripts/council_state.py`'s `DEFAULT_*` constants (`grep -n "^DEFAULT_"
+  ${CLAUDE_PLUGIN_ROOT}/scripts/council_state.py`)?
 
 ## 3. Report
 

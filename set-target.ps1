@@ -78,8 +78,19 @@ if ([string]::IsNullOrWhiteSpace($Path)) {
   exit 0
 }
 
-# Normalize: forward slashes are safest inside JSON.
-$normalized = $Path.Trim().Replace('\', '/')
+# Normalize: store an absolute path (so it means the same thing regardless of which
+# directory a later command happens to run from), forward slashes are safest inside
+# JSON. Mirrors set-target.sh's resolution rules exactly.
+$trimmedPath = $Path.Trim()
+if ($trimmedPath -eq '.') {
+  $normalized = '.'
+} elseif (Test-Path $Path -PathType Container) {
+  $normalized = (Resolve-Path $Path).Path.Replace('\', '/')
+} elseif ([System.IO.Path]::IsPathRooted($trimmedPath)) {
+  $normalized = $trimmedPath.Replace('\', '/')
+} else {
+  $normalized = (Join-Path (Get-Location).Path $trimmedPath).Replace('\', '/')
+}
 
 if ($normalized -ne '.' -and -not (Test-Path $Path)) {
   Write-Warning "That path doesn't exist yet: $Path  (setting it anyway)"

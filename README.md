@@ -10,6 +10,10 @@ Install it once, then use it from any project — its own state (`.council/`) al
 belongs to whichever project you're actually working in, not to wherever the plugin
 itself lives.
 
+**Prerequisites:** `git`, `python3`, and `jq` (used by the plugin's two hooks — without
+it they silently no-op rather than block your edits; `/council-doctor` checks for all
+three). `claude` itself, obviously.
+
 ```
 Arbiter (Opus) → Engineer (Sonnet) → Security (Sonnet) → Verifier (Sonnet) → Realist (Opus) → commit
     plan            implement          audit + fix         test + prove        review/critique
@@ -66,6 +70,10 @@ that run in parallel with a per-agent timeout; every spawn is logged and shown i
    `target_repo`. The loop stops on its own when the ceiling is hit or the goal is
    complete.
 
+   `/loop` is a bundled Claude Code skill, not part of this plugin — if it isn't
+   available in your session, run `./run-loop.sh` / `.\run-loop.ps1` instead (see
+   "Running it unattended" below); they loop the same command without needing `/loop`.
+
 5. **Check in any time:** `/council-status` — shows the goal, cycles used vs. the ceiling,
    elapsed time, and recent history. Use `/stop` to halt cleanly at the next cycle
    boundary; if you interrupt with `Esc` / `Ctrl-C`, check the target repo with
@@ -114,7 +122,7 @@ and the git-safety guards are still hard stops — `/goal` is the full reset pat
 | `commit_prefix` | Prefix for council commit messages (default `council:`). |
 | `verifier` | Policy for the QA role: `{"enabled": true, "max_test_files": 2}`. Set `enabled: false` for docs-only or non-code goals so a cycle doesn't spend a seat on it; `max_test_files` caps how many test files one cycle may touch. Optional — defaults injected when the key is absent. |
 | `dynamic_agents` | Policy for temporary per-cycle specialist agents: `{"enabled": false, "max_parallel": 4, "timeout_minutes": 10}`. Defaults to `enabled: false` — flip it on once a goal actually needs a specialist domain (db-schema, crypto, authz-isolation, …); a timed-out or malformed agent is actively killed (`TaskStop`) at its own budget, not just relabeled after the fact. Optional — defaults injected when the key is absent. |
-| `brain_events` | Best-effort Brain-wiki event emitted by the driver (`run-loop.ps1`/`run-loop.sh`) at exit, never per cycle: `{"enabled": true, "url": "http://127.0.0.1:8765"}`. Keep the real URL in `config.local.json`, not here — this tracked default is a portable loopback placeholder. Optional — defaults injected when the key is absent. |
+| `brain_events` | Best-effort Brain-wiki event emitted by the driver (`run-loop.ps1`/`run-loop.sh`) at exit, never per cycle: `{"enabled": false, "url": "http://127.0.0.1:8765"}`. This is a personal-infra integration — it's off by default, since most projects don't run a Brain server. Set `enabled: true` (and the real URL) in `config.local.json`, not here, if you have one. Optional — defaults injected when the key is absent. |
 | `config.local.json` | Optional, gitignored, per-machine override file living beside `config.json` in the active project (`.council/config.local.json`). Any keys it sets win over `config.json`, merged recursively — a partial nested object like `{"ceiling": {"max_cycles": 20}}` overrides just that leaf and leaves `max_minutes` (and everything else) at `config.json`'s value. |
 
 **`--root` defaults to the caller's cwd** — the active project — never to wherever this

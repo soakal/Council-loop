@@ -78,6 +78,12 @@ def main() -> int:
         "scripts/discover_tests.py",
         "scripts/validate.sh",
         "scripts/postmortem_payload.py",
+        "scripts/hooks/validate_after_edit.sh",
+        "scripts/hooks/guard_state_and_secrets.sh",
+        "skills/docs-sync/SKILL.md",
+        "skills/loop-log-triage/SKILL.md",
+        "skills/council-loop-status-check/SKILL.md",
+        "LICENSE",
         "start-council.cmd",
         "start-council.sh",
         "set-target.ps1",
@@ -125,6 +131,13 @@ def main() -> int:
     add(results, "OK" if shutil.which("git") else "FAIL", "git executable", shutil.which("git") or "not found")
     add(results, "OK" if shutil.which("python3") else "FAIL", "python3 executable", shutil.which("python3") or "not found")
     add(results, "OK" if shutil.which("claude") else "WARN", "claude executable", shutil.which("claude") or "not on PATH")
+    add(
+        results,
+        "OK" if shutil.which("jq") else "WARN",
+        "jq executable",
+        shutil.which("jq") or "not found -- this plugin's PostToolUse/PreToolUse hooks "
+        "(hooks/hooks.json) silently no-op without it",
+    )
 
     print("# Council Doctor")
     print()

@@ -9,5 +9,6 @@
   },
   "homepage": "https://github.com/soakal/Council-loop",
   "repository": "https://github.com/soakal/Council-loop.git",
+  "license": "MIT",
   "keywords": ["automation", "council", "agents", "autonomous", "testing", "code-review"]
 }

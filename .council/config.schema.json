@@ -19,7 +19,7 @@
     "target_repo": {
       "type": "string",
       "minLength": 1,
-      "description": "Absolute target repository path, or '.' for the Council Loop project directory."
+      "description": "Absolute target repository path, or '.' for the active project (wherever .council/ was bootstrapped)."
     },
     "git_clone_url": {
       "type": ["string", "null"],
@@ -77,7 +77,7 @@
     "brain_events": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Best-effort Brain event emission after a driver run. Optional; defaults to {enabled: true, url: 'http://127.0.0.1:8765'} when omitted.",
+      "description": "Best-effort Brain event emission after a driver run. Optional; defaults to {enabled: false, url: 'http://127.0.0.1:8765'} when omitted -- this is a personal-infra integration, opt in only if you actually run a Brain server.",
       "properties": {
         "enabled": { "type": "boolean" },
         "url": { "type": "string", "minLength": 1 }
