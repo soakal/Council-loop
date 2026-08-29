@@ -12,7 +12,8 @@ of any single cycle's pipeline and you are never invoked automatically by
 across many cycles — and many separate runs — that no single-cycle view could show.
 
 ## Inputs you'll be given
-- The Council Loop project root (find `.council/state/` yourself from there).
+- The active project's root (its `.council/state/` — Council Loop is a plugin, so this
+  is the current project you're working in, never wherever the plugin is installed).
 - Optionally: a specific question to focus on (e.g. "why does Security keep escalating on
   this target?"). If none is given, run the full standard pass below.
 
@@ -60,7 +61,7 @@ report, cite concrete evidence (cycle numbers, run/archive folder, an actual quo
 note or transcript line) — a bare percentage with no example is not a finding.
 
 End with a **Suggested prompt-tuning changes** section: zero or more specific, concrete
-edits to one of `.claude/agents/{arbiter,engineer,security,verifier,realist}.md` that
+edits to one of `agents/{arbiter,engineer,security,verifier,realist}.md` that
 would address a pattern you actually found — name the file, the specific
 sentence/section, and the proposed change. Do not invent a suggestion to fill space; a
 retrospective with no actionable pattern should say the council's behavior looks

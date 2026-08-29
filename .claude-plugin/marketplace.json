@@ -1,0 +1,14 @@
+{
+  "name": "council-loop-marketplace",
+  "owner": {
+    "name": "CWI AI",
+    "url": "https://github.com/soakal"
+  },
+  "plugins": [
+    {
+      "name": "council-loop",
+      "source": "./",
+      "description": "Autonomous plan -> implement -> audit -> test -> review -> commit cycle driven by a five-role council, running entirely on Claude Code primitives."
+    }
+  ]
+}

@@ -1,4 +1,8 @@
 # Council Loop runtime state (regenerated each run — not source)
+# .council/config.json is bootstrapped per-project by /goal from this plugin's own
+# .council/config.example.json template -- it is NOT a tracked plugin asset, even
+# inside this repo's own working copy (self-hosting/dev use still generates one here).
+.council/config.json
 .council/state/*
 !.council/state/.gitkeep
 run-loop-*.log*

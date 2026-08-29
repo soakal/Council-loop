@@ -1,10 +1,14 @@
 # Council Loop
 
-A **portable, native Claude Code** autonomous coding loop — a re-implementation of the
-PowerShell `claude-council-loop`. A five-role council advances a goal one verifiable
+A **Claude Code plugin** — an autonomous coding loop, originally a re-implementation of
+the PowerShell `claude-council-loop`. A five-role council advances a goal one verifiable
 step at a time and auto-commits each accepted step. It runs entirely on Claude Code
 (custom commands + subagents + `/loop`), so there are **no direct API calls and no
 per-token billing** — it uses your Claude Code subscription.
+
+Install it once, then use it from any project — its own state (`.council/`) always
+belongs to whichever project you're actually working in, not to wherever the plugin
+itself lives.
 
 ```
 Arbiter (Opus) → Engineer (Sonnet) → Security (Sonnet) → Verifier (Sonnet) → Realist (Sonnet) → commit
@@ -29,26 +33,23 @@ privacy/PII, license, concurrency, observability, … — illustrative, not exha
 that run in parallel with a per-agent timeout; every spawn is logged and shown in
 `/council-status`.
 
-> **New here? Read [QUICKSTART.md](QUICKSTART.md)** — plain-English setup with a
-> double-click Desktop shortcut, a `start-council.cmd` launcher, and a `set-target.ps1`
-> helper. The rest of this file is the fuller reference.
+> **QUICKSTART.md is currently stale** — it documents the pre-plugin, copy-the-folder
+> setup (a Desktop shortcut, `start-council.cmd`, `set-target.ps1`). That workflow no
+> longer applies now that Council Loop is a plugin; a rewritten, plain-English quickstart
+> for the plugin-install flow is still pending. Follow the **Quick start** below instead.
 
 ## Quick start
 
-1. **Point it at a repo.** Easiest — from a shell in this folder:
-   ```powershell
-   .\set-target.ps1 "C:\path\to\your\repo"
+1. **Install the plugin, once.** In any Claude Code session:
    ```
-   ```bash
-   ./set-target.sh "/path/to/your/repo"
+   /plugin marketplace add soakal/Council-loop
+   /plugin install council-loop
    ```
-   (Or edit `.council/config.json` → `target_repo` by hand. Leave it as `"."` to have the
-   council operate on this folder itself — handy for a first test.)
+   (Or, developing/testing locally: `claude --plugin-dir /path/to/Council-loop`.)
 
-2. **Launch it.** Double-click the **`Council Loop`** Desktop shortcut (or
-   `start-council.cmd` in this folder) on Windows, or run `./start-council.sh` on
-   Linux/macOS, to open Claude Code here so the commands load. From a terminal instead:
-   `cd` into this folder and run `claude`.
+2. **`cd` into whatever project you want the council to work on**, and start Claude
+   Code there. Council Loop's own state (`.council/`) always belongs to this project —
+   never to wherever the plugin itself is installed.
 
 3. **Set a goal:**
    ```
@@ -95,10 +96,10 @@ and the git-safety guards are still hard stops — `/goal` is the full reset pat
 
 | Field | Meaning |
 |---|---|
-| `target_repo` | Absolute path where edits + commits happen. `"."` = this folder. |
+| `target_repo` | Absolute path where edits + commits happen. `"."` = the active project (wherever `.council/` was bootstrapped) — the normal case. |
 | `git_clone_url` | Optional — the repo's origin, for reference / cloning elsewhere. |
 | `revise_attempts` | How many **Engineer re-invocations** a cycle may spend before the step is deferred (default 2). Shared across Security escalations, Verifier failures, dynamic-agent fixes, and Realist revisions. |
-| `models` | Which model each role uses (`fable` / `opus` / `sonnet` / `haiku`) — passed as a model override when each subagent is launched; the frontmatter in `.claude/agents/*.md` is the fallback. |
+| `models` | Which model each role uses (`fable` / `opus` / `sonnet` / `haiku`) — passed as a model override when each subagent is launched; the frontmatter in `agents/*.md` is the fallback. |
 | `dry_run` | If `true`, the council plans/reviews without modifying, staging, committing, pushing, or opening PRs. |
 | `open_pr` | If `true`, accepted committed cycles print PR-ready handoff details for wrappers/users to open a PR. |
 | `transcripts` | If `true`, each cycle writes a readable transcript under `.council/state/transcripts/`. |
@@ -108,18 +109,24 @@ and the git-safety guards are still hard stops — `/goal` is the full reset pat
 | `verifier` | Policy for the QA role: `{"enabled": true, "max_test_files": 2}`. Set `enabled: false` for docs-only or non-code goals so a cycle doesn't spend a seat on it; `max_test_files` caps how many test files one cycle may touch. Optional — defaults injected when the key is absent. |
 | `dynamic_agents` | Policy for temporary per-cycle specialist agents: `{"enabled": false, "max_parallel": 4, "timeout_minutes": 10}`. Defaults to `enabled: false` — flip it on once a goal actually needs a specialist domain (db-schema, crypto, authz-isolation, …); a timed-out or malformed agent is actively killed (`TaskStop`) at its own budget, not just relabeled after the fact. Optional — defaults injected when the key is absent. |
 | `brain_events` | Best-effort Brain-wiki event emitted by the driver (`run-loop.ps1`/`run-loop.sh`) at exit, never per cycle: `{"enabled": true, "url": "http://127.0.0.1:8765"}`. Keep the real URL in `config.local.json`, not here — this tracked default is a portable loopback placeholder. Optional — defaults injected when the key is absent. |
-| `config.local.json` | Optional, gitignored, per-machine override file living beside `config.json` (`.council/config.local.json`). Any keys it sets win over `config.json`, merged recursively — a partial nested object like `{"ceiling": {"max_cycles": 20}}` overrides just that leaf and leaves `max_minutes` (and everything else) at `config.json`'s value. `set-target.ps1` and `set-target.sh` write to this file instead of the tracked `config.json`. |
+| `config.local.json` | Optional, gitignored, per-machine override file living beside `config.json` in the active project (`.council/config.local.json`). Any keys it sets win over `config.json`, merged recursively — a partial nested object like `{"ceiling": {"max_cycles": 20}}` overrides just that leaf and leaves `max_minutes` (and everything else) at `config.json`'s value. |
 
-**Because `config.local.json` is gitignored, it does NOT exist in a fresh clone or a
-`git worktree`** — a worktree only receives tracked files. Driving a cycle from a
-worktree with no copy of `config.local.json` silently falls back to `config.json`'s
-tracked values with no error (this is by design for a fresh machine with no local
-overrides, but it's easy to hit by accident with a worktree-based run). Every
+**`--root` defaults to the caller's cwd** — the active project — never to wherever this
+plugin is installed; that's what lets the same plugin install serve every project you
+use it from. There's no upward search: cwd must literally be the project root (where
+`.council/` lives), which is the normal case for a slash command's Bash calls. Because
+`config.local.json` is gitignored, it does NOT exist in a fresh clone of *the active
+project* or one of its `git worktree`s — a worktree only receives tracked files, and
+`.council/config.local.json` never is one. Driving a cycle from such a worktree silently
+falls back to `config.json`'s tracked values with no error (by design for a fresh
+checkout with no local overrides yet, but easy to hit by accident). Every
 `effective-config` call prints its resolved root and whether `config.local.json` was
 found to stderr — check that line if a run's ceiling/model overrides don't seem to be
-taking effect. `--root` also defaults to this repo's own directory regardless of the
-caller's current working directory, so a drifted cwd can no longer cause a cycle to
-silently read the wrong `.council/`.
+taking effect.
+
+> `set-target.ps1`/`set-target.sh` predate the plugin conversion and haven't been
+> updated for it yet (same as `start-council.cmd`/`start-council.sh` below) — for now,
+> edit `.council/config.local.json` by hand in the active project.
 
 To run the council against a repo you don't have locally: clone it, set `target_repo` to
 its path. The council commits into **that** repo's history.
@@ -150,71 +157,68 @@ unexpected slipped past the pre-run guard mid-cycle, it still can't reach a comm
 
 ## Portability
 
-Everything lives in this folder — copy `.claude/`, `.council/`, `CLAUDE.md`, and this
-README into (or beside) any project, adjust `target_repo`, and the same four commands
-work with no other changes. Runtime state (`.council/state/*`) is gitignored and
-regenerated per run.
+Council Loop is a **Claude Code plugin**: install it once (`.claude-plugin/plugin.json` +
+`.claude-plugin/marketplace.json` make this repo installable directly), then use it from
+any project via `/goal`, `/council-cycle`, etc. Its own state (`.council/`) is
+bootstrapped into whichever project you're actually working in — never into wherever the
+plugin itself lives — so there's nothing to copy or adjust per-project beyond running
+`/goal` there for the first time.
 
-### Running it on another PC
+### Running it on another machine
 
-Move the tool to another machine by **copying the whole `Council loop` folder**, or by
-cloning it fresh:
+Install the plugin there the normal way (`/plugin marketplace add soakal/Council-loop`,
+`/plugin install council-loop`, or `claude --plugin-dir` a local clone for development) —
+there's no folder to move and no per-machine `target_repo` edit, since `target_repo: "."`
+already means "whichever project I'm in," which is true on every machine identically.
 
-```
-git clone https://github.com/soakal/Council-loop
-```
-
-Then on that machine:
-
-1. **Install Claude Code** — the one hard requirement (the loop runs on it).
-2. **Set `target_repo` locally:** `.\set-target.ps1 "C:\path\on\this\pc\to\project"` on
-   Windows, or `./set-target.sh "/path/on/this/machine/to/project"` on Linux/macOS. An
-   absolute path from the old machine won't exist here; use a real one or `"."`.
-3. **Launch from the moved folder.** On Windows, recreate the Desktop shortcut if you use
-   one — the `.lnk` stores the old machine's path and doesn't travel. You can always run
-   `start-council.cmd` or `./start-council.sh` directly from this folder.
-
-The `.claude/` commands + agents, `.council/config.json`, launcher, and helper all resolve
-paths from their own location, so nothing else needs editing.
-
-> **Fresh-Windows note:** PowerShell may block `set-target.ps1` until you allow local
-> scripts once — `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` — or just edit
-> `target_repo` in `.council/config.json` by hand.
+> **Legacy launchers, not yet updated for the plugin model:** `start-council.cmd`,
+> `start-council.sh`, `set-target.ps1`, and `set-target.sh` all predate this conversion —
+> they assumed the whole toolkit and the project being worked on were the same folder,
+> which is no longer how this works. They still exist in this repo but don't reflect the
+> plugin-based flow above; treat them as pending a redesign, not as the current
+> recommended path.
 
 ## Layout
 
 ```
-.claude/
-  agents/    arbiter.md · engineer.md · security.md · verifier.md · realist.md   # the five council roles
-             retrospective.md   # manual, cross-run analysis agent -- not part of any cycle
-  commands/  goal.md · council-cycle.md · council-status.md · council-doctor.md
-             council-repair.md · council-rollback.md · forge-skill.md · stop.md
-  skills/    docs-sync/ · loop-log-triage/ · council-loop-status-check/ · reusable skills authored mid-run by /forge-skill
-  settings.json   # tracked repo-hardening hooks -- see CLAUDE.md
+.claude-plugin/
+  plugin.json        # plugin manifest (name, version, description)
+  marketplace.json    # lets this repo act as its own single-plugin marketplace
+agents/    arbiter.md · engineer.md · security.md · verifier.md · realist.md   # the five council roles
+           retrospective.md   # manual, cross-run analysis agent -- not part of any cycle
+commands/  goal.md · council-cycle.md · council-status.md · council-doctor.md
+           council-repair.md · council-rollback.md · forge-skill.md · stop.md
+skills/    docs-sync/ · loop-log-triage/ · council-loop-status-check/
+hooks/
+  hooks.json   # PostToolUse/PreToolUse hook definitions -- see CLAUDE.md
 .council/
-  config.json · config.example.json · config.schema.json
-  state/     # goal.md · history.jsonl · dynamic-agents.jsonl · cycle.lock · stop.flag
-             # transcripts/ · archive/<started_at>/ (prior runs, moved here by /goal)
-             # all of the above: runtime, gitignored
+  config.example.json · config.schema.json   # bundled templates -- /goal copies these
+                                              # into the ACTIVE project's own .council/,
+                                              # which is never this plugin's own copy
 scripts/
   validate.sh            # lightweight repository smoke checks
   council_state.py       # deterministic config/history/lock helper used by commands
   council_doctor.py      # command-line health checks
   discover_tests.py      # common test command discovery
   postmortem_payload.py  # gathers raw git data for NEXUS's post-mortem trigger
-  hooks/                 # scripts backing .claude/settings.json's hooks
+  hooks/                 # scripts backing hooks/hooks.json
 CLAUDE.md          # project memory / rules for the loop
-QUICKSTART.md      # plain-English getting-started guide
-start-council.cmd  # double-click launcher (opens Claude Code in this folder)
-start-council.sh   # Unix launcher equivalent
-set-target.ps1     # set target_repo without hand-editing JSON
-set-target.sh      # Unix target_repo helper equivalent
-run-loop.ps1       # unattended Windows driver (loops /council-cycle until stop.flag)
-run-loop.sh        # unattended Linux/macOS driver equivalent
+QUICKSTART.md      # plain-English getting-started guide (currently stale -- see note above)
+start-council.cmd  # legacy pre-plugin launcher -- see note above
+start-council.sh   # legacy pre-plugin launcher -- see note above
+set-target.ps1     # legacy pre-plugin launcher -- see note above
+set-target.sh      # legacy pre-plugin launcher -- see note above
+run-loop.ps1       # unattended Windows driver (loops /council-cycle until stop.flag) --
+                   # still assumes co-location with scripts/, not yet updated for the
+                   # plugin model either; works for self-hosting, not yet for driving an
+                   # arbitrary other project unattended
+run-loop.sh        # unattended Linux/macOS driver equivalent, same caveat
 ```
 
 ## Skill authoring mid-run
 
-`/forge-skill <name> — <what it should do>` writes a new reusable skill into
-`.claude/skills/`, available immediately as `/<name>` and preserved across future runs
-and repos — mirroring the original PowerShell setup's skill-generation feature.
+`/forge-skill <name> — <what it should do>` writes a new reusable skill into the
+**current project's own** `.claude/skills/` (an ordinary project-level Claude Code
+skill, not part of this plugin's bundle), available immediately as `/<name>` and
+preserved in that project across future runs — mirroring the original PowerShell setup's
+skill-generation feature.

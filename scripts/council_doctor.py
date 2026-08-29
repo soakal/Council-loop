@@ -40,30 +40,39 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--root",
-        default=Path(__file__).resolve().parents[1],
-        help="Council Loop project root (defaults to this script's own repo, not the caller's cwd)",
+        default=Path.cwd(),
+        help="Active project root whose .council/ this checks (defaults to the caller's "
+        "cwd, not this script's own location -- Council Loop is a plugin used from "
+        "whatever project you're currently in)",
     )
     args = parser.parse_args()
     root = Path(args.root).resolve()
     results: list[tuple[str, str, str]] = []
 
+    # This plugin's OWN completeness -- checked relative to where council_doctor.py
+    # itself lives, never relative to --root (the active project, which is a
+    # different, arbitrary repo and was never supposed to contain these files).
+    plugin_root = Path(__file__).resolve().parents[1]
     required = [
-        ".council/config.json",
         ".council/config.example.json",
         ".council/config.schema.json",
-        ".claude/commands/goal.md",
-        ".claude/commands/council-cycle.md",
-        ".claude/commands/council-status.md",
-        ".claude/commands/council-doctor.md",
-        ".claude/commands/council-repair.md",
-        ".claude/commands/council-rollback.md",
-        ".claude/commands/forge-skill.md",
-        ".claude/commands/stop.md",
-        ".claude/agents/arbiter.md",
-        ".claude/agents/engineer.md",
-        ".claude/agents/security.md",
-        ".claude/agents/verifier.md",
-        ".claude/agents/realist.md",
+        ".claude-plugin/plugin.json",
+        ".claude-plugin/marketplace.json",
+        "hooks/hooks.json",
+        "commands/goal.md",
+        "commands/council-cycle.md",
+        "commands/council-status.md",
+        "commands/council-doctor.md",
+        "commands/council-repair.md",
+        "commands/council-rollback.md",
+        "commands/forge-skill.md",
+        "commands/stop.md",
+        "agents/arbiter.md",
+        "agents/engineer.md",
+        "agents/security.md",
+        "agents/verifier.md",
+        "agents/realist.md",
+        "agents/retrospective.md",
         "scripts/council_doctor.py",
         "scripts/council_state.py",
         "scripts/discover_tests.py",
@@ -77,8 +86,8 @@ def main() -> int:
         "run-loop.sh",
     ]
     for rel in required:
-        path = root / rel
-        add(results, "OK" if path.exists() else "FAIL", rel, "" if path.exists() else "missing")
+        path = plugin_root / rel
+        add(results, "OK" if path.exists() else "FAIL", f"plugin file: {rel}", "" if path.exists() else "missing")
 
     try:
         config = council_state.load_config(root)
@@ -89,7 +98,7 @@ def main() -> int:
 
     if config:
         target = target_path(root, config)
-        add(results, "WARN" if target == root else "OK", "target repo", str(target))
+        add(results, "WARN" if target == plugin_root else "OK", "target repo", str(target))
         git_dir = run_git(target, "rev-parse", "--git-dir")
         if git_dir.returncode == 0:
             add(results, "OK", "target git repository", git_dir.stdout.strip())

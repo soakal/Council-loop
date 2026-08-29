@@ -4,27 +4,32 @@ set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
 required_files=(
-  "$repo_root/.council/config.json"
+  "$repo_root/.claude-plugin/plugin.json"
+  "$repo_root/.claude-plugin/marketplace.json"
   "$repo_root/.council/config.example.json"
   "$repo_root/.council/config.schema.json"
-  "$repo_root/.claude/commands/council-doctor.md"
-  "$repo_root/.claude/commands/council-repair.md"
-  "$repo_root/.claude/commands/council-rollback.md"
-  "$repo_root/.claude/commands/goal.md"
-  "$repo_root/.claude/commands/council-cycle.md"
-  "$repo_root/.claude/commands/council-status.md"
-  "$repo_root/.claude/commands/forge-skill.md"
-  "$repo_root/.claude/commands/stop.md"
-  "$repo_root/.claude/agents/arbiter.md"
-  "$repo_root/.claude/agents/engineer.md"
-  "$repo_root/.claude/agents/security.md"
-  "$repo_root/.claude/agents/verifier.md"
-  "$repo_root/.claude/agents/realist.md"
+  "$repo_root/hooks/hooks.json"
+  "$repo_root/commands/council-doctor.md"
+  "$repo_root/commands/council-repair.md"
+  "$repo_root/commands/council-rollback.md"
+  "$repo_root/commands/goal.md"
+  "$repo_root/commands/council-cycle.md"
+  "$repo_root/commands/council-status.md"
+  "$repo_root/commands/forge-skill.md"
+  "$repo_root/commands/stop.md"
+  "$repo_root/agents/arbiter.md"
+  "$repo_root/agents/engineer.md"
+  "$repo_root/agents/security.md"
+  "$repo_root/agents/verifier.md"
+  "$repo_root/agents/realist.md"
+  "$repo_root/agents/retrospective.md"
   "$repo_root/scripts/council_doctor.py"
   "$repo_root/scripts/council_state.py"
   "$repo_root/scripts/discover_tests.py"
   "$repo_root/scripts/validate.sh"
   "$repo_root/scripts/postmortem_payload.py"
+  "$repo_root/scripts/hooks/validate_after_edit.sh"
+  "$repo_root/scripts/hooks/guard_state_and_secrets.sh"
   "$repo_root/start-council.cmd"
   "$repo_root/start-council.sh"
   "$repo_root/set-target.ps1"
@@ -47,7 +52,7 @@ from pathlib import Path
 
 root = Path(sys.argv[1])
 
-for rel in (".council/config.json", ".council/config.example.json", ".council/config.schema.json"):
+for rel in (".council/config.example.json", ".council/config.schema.json"):
     path = root / rel
     with path.open(encoding="utf-8") as handle:
         cfg = json.load(handle)
@@ -67,14 +72,14 @@ for rel in (".council/config.json", ".council/config.example.json", ".council/co
             raise SystemExit(f"{rel} missing models.{key}")
 
 for rel in (
-    ".claude/commands/goal.md",
-    ".claude/commands/council-doctor.md",
-    ".claude/commands/council-cycle.md",
-    ".claude/commands/council-repair.md",
-    ".claude/commands/council-rollback.md",
-    ".claude/commands/council-status.md",
-    ".claude/commands/forge-skill.md",
-    ".claude/commands/stop.md",
+    "commands/goal.md",
+    "commands/council-doctor.md",
+    "commands/council-cycle.md",
+    "commands/council-repair.md",
+    "commands/council-rollback.md",
+    "commands/council-status.md",
+    "commands/forge-skill.md",
+    "commands/stop.md",
 ):
     text = (root / rel).read_text(encoding="utf-8")
     if not text.startswith("---\n"):
@@ -88,14 +93,35 @@ PY
 bash -n "$repo_root/set-target.sh"
 bash -n "$repo_root/start-council.sh"
 python3 -m py_compile "$repo_root/scripts/council_state.py" "$repo_root/scripts/council_doctor.py" "$repo_root/scripts/discover_tests.py"
-python3 "$repo_root/scripts/council_state.py" --root "$repo_root" effective-config >/dev/null
 python3 "$repo_root/scripts/discover_tests.py" "$repo_root" >/dev/null
-python3 "$repo_root/scripts/council_doctor.py" --root "$repo_root" >/dev/null
 
 tmp_root="$(mktemp -d)"
 trap 'rm -rf "$tmp_root"' EXIT
-mkdir -p "$tmp_root/.council/state"
-cp "$repo_root/.council/config.json" "$tmp_root/.council/config.json"
+git -C "$tmp_root" init -q
+git -C "$tmp_root" -c user.email=validate@localhost -c user.name=validate \
+  commit -q --allow-empty -m 'validate.sh scratch project'
+
+# --- init-config bootstraps .council/config.json from this plugin's own bundled
+#     template -- .council/config.json is a per-project runtime artifact now
+#     (gitignored, created by /goal), never a file this repo ships pre-populated,
+#     so every check below exercises the bootstrap path against a temp project
+#     rather than assuming a live config.json sitting in $repo_root. ---
+init_config_stdout="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" init-config)"
+if [[ "$init_config_stdout" != *"created"* ]]; then
+  echo "Expected init-config to report creating a new config.json, got: $init_config_stdout" >&2
+  exit 1
+fi
+if [[ ! -f "$tmp_root/.council/config.json" || ! -f "$tmp_root/.council/config.schema.json" ]]; then
+  echo "init-config did not create config.json/config.schema.json in the temp project" >&2
+  exit 1
+fi
+init_config_again_stdout="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" init-config)"
+if [[ "$init_config_again_stdout" != *"already exists"* ]]; then
+  echo "Expected a second init-config call to be a no-op, got: $init_config_again_stdout" >&2
+  exit 1
+fi
+python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" effective-config >/dev/null
+python3 "$repo_root/scripts/council_doctor.py" --root "$tmp_root" >/dev/null
 
 # --- config.local.json absent: WARNING on stderr, base config unchanged ---
 no_local_stderr="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_root" effective-config 2>&1 >/dev/null)"
@@ -182,13 +208,20 @@ if [[ "$bogus_verifier_status" -eq 0 ]]; then
 fi
 rm -f "$tmp_root/.council/state/history.jsonl"
 
-# --- --root default is cwd-independent: no --root, run from an unrelated directory ---
+# --- --root defaults to cwd (the active project), NOT this script's own location:
+#     bootstrap a second scratch project, then confirm omitting --root while cwd'd
+#     there resolves the same as passing --root explicitly. ---
 scratch_cwd_dir="$(mktemp -d)"
-default_root_output="$(cd "$scratch_cwd_dir" && python3 "$repo_root/scripts/council_state.py" effective-config)"
-explicit_root_output="$(python3 "$repo_root/scripts/council_state.py" --root "$repo_root" effective-config)"
+python3 "$repo_root/scripts/council_state.py" --root "$scratch_cwd_dir" init-config >/dev/null
+default_root_output="$(cd "$scratch_cwd_dir" && python3 "$repo_root/scripts/council_state.py" effective-config 2>/dev/null)"
+explicit_root_output="$(python3 "$repo_root/scripts/council_state.py" --root "$scratch_cwd_dir" effective-config 2>/dev/null)"
 rm -rf "$scratch_cwd_dir"
 if [[ "$default_root_output" != "$explicit_root_output" ]]; then
-  echo "effective-config with no --root (cwd elsewhere) differs from --root \"\$repo_root\" -- --root default is not cwd-independent" >&2
+  echo "effective-config with no --root (cwd = scratch project) differs from --root \"\$scratch_cwd_dir\" -- --root default is not cwd-based" >&2
+  exit 1
+fi
+if [[ -z "$default_root_output" ]]; then
+  echo "effective-config with no --root produced no output -- --root default appears broken" >&2
   exit 1
 fi
 

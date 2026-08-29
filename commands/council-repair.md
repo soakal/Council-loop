@@ -10,8 +10,8 @@ $ARGUMENTS
 
 Do this safely:
 
-1. Run `python3 scripts/council_doctor.py` and show the result.
-2. Run `python3 scripts/council_state.py repair-history` first. If the user passed `--apply`, run `python3 scripts/council_state.py repair-history --apply`; otherwise do not rewrite files.
+1. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/council_doctor.py` and show the result.
+2. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/council_state.py repair-history` first. If the user passed `--apply`, run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/council_state.py repair-history --apply`; otherwise do not rewrite files.
 3. If `.council/state/stop.flag` exists, print its contents and classify it:
    - Ceiling stops may auto-resume when cycle headroom exists.
    - User stops, goal-complete stops, invalid config, and target repo safety stops require an explicit user action or a new `/goal`.

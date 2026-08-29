@@ -14,6 +14,11 @@ from pathlib import Path
 from typing import Any
 
 
+# Where THIS plugin's own bundled files live (scripts/, .council/config.example.json,
+# .council/config.schema.json) -- independent of --root, which points at whichever
+# active project is being council-looped right now.
+PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+
 REQUIRED_KEYS = (
     "target_repo",
     "ceiling",
@@ -218,6 +223,34 @@ def cmd_effective_config(args: argparse.Namespace) -> int:
         print(f"invalid council config: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(config, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_init_config(args: argparse.Namespace) -> int:
+    """Bootstrap <root>/.council/config.json (+ config.schema.json for editor
+    help) from this plugin's own bundled template, if the active project
+    doesn't already have one. A no-op, not an error, when it already exists --
+    /goal calls this unconditionally on every fresh objective."""
+    root = Path(args.root).resolve()
+    council_dir = root / ".council"
+    config_path = council_dir / "config.json"
+    if config_path.exists():
+        print(f"{config_path} already exists -- leaving it alone")
+        return 0
+
+    template_path = PLUGIN_ROOT / ".council" / "config.example.json"
+    data = load_json(template_path)
+    data["target_repo"] = "."
+    data["git_clone_url"] = None
+
+    council_dir.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    schema_dst = council_dir / "config.schema.json"
+    if not schema_dst.exists():
+        shutil.copy2(PLUGIN_ROOT / ".council" / "config.schema.json", schema_dst)
+
+    print(f"created {config_path}")
     return 0
 
 
@@ -539,15 +572,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--root",
-        default=Path(__file__).resolve().parents[1],
-        help="Council Loop project root (defaults to this script's own repo, "
-        "not the caller's cwd -- a cycle invoked with a drifted/worktree cwd "
-        "must still read THIS repo's .council/, never a copy's)",
+        default=Path.cwd(),
+        help="Active project root whose .council/ this command reads/writes "
+        "(defaults to the caller's cwd). This is deliberately NOT this "
+        "script's own location -- Council Loop is a plugin used from whatever "
+        "project you're currently in, and its state belongs to that project, "
+        "not to wherever the plugin happens to be installed.",
     )
     subparsers = parser.add_subparsers(required=True)
 
     effective = subparsers.add_parser("effective-config")
     effective.set_defaults(func=cmd_effective_config)
+
+    init_config = subparsers.add_parser("init-config")
+    init_config.set_defaults(func=cmd_init_config)
 
     count = subparsers.add_parser("history-count")
     count.set_defaults(func=cmd_history_count)

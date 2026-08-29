@@ -64,9 +64,9 @@ re-runs an *existing* check. You are the only role that can leave the target rep
        `justfile`, or the test job in `.github/workflows/`;
    (d) nothing → `PASS_NO_TEST` / `REASON: no-harness`.
    **A repo's own validation script counts as its harness.** When the target is a
-   tooling repo whose checks live in `scripts/validate.sh` (the Council Loop project
-   itself is exactly this shape), adding a focused assertion block to that script is
-   authoring a test, and the verdict is `PASS_TEST_UPDATED`.
+   tooling repo whose checks live in a `scripts/validate.sh`-style script (Council Loop's
+   own `scripts/validate.sh` is exactly this shape), adding a focused assertion block to
+   that script is authoring a test, and the verdict is `PASS_TEST_UPDATED`.
 
 4. **Author the test — minimal, in-convention, in-scope.**
    - Read a neighbouring test first. Match its location, file naming, imports, fixtures,

@@ -1,6 +1,6 @@
 ---
 name: docs-sync
-description: Check whether CLAUDE.md, README.md, and QUICKSTART.md are in sync with the actual .claude/commands/, .claude/agents/, and .council/config.schema.json — catches a command/agent/config key that's undocumented, or documentation describing one that no longer exists. Use when the user asks to check for doc drift, run docs-sync, or after adding/removing/renaming a command, agent, or config key. One-shot report; does not edit the docs itself.
+description: Check whether CLAUDE.md, README.md, and QUICKSTART.md are in sync with the actual commands/, agents/, and .council/config.schema.json — catches a command/agent/config key that's undocumented, or documentation describing one that no longer exists. Use when the user asks to check for doc drift, run docs-sync, or after adding/removing/renaming a command, agent, or config key. One-shot report; does not edit the docs itself.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -15,9 +15,9 @@ edits the docs itself.
 
 ## 1. Build the ground truth
 
-- `ls .claude/commands/*.md` → each filename (minus `.md`) is a real `/<name>` command.
+- `ls commands/*.md` → each filename (minus `.md`) is a real `/<name>` command.
   Read each file's frontmatter `description:` line.
-- `ls .claude/agents/*.md` → each is a real subagent. Read each file's own declared role
+- `ls agents/*.md` → each is a real subagent. Read each file's own declared role
   and, if present in its frontmatter or body, its declared model.
 - Read `.council/config.schema.json`'s top-level `properties` keys and its `required`
   array — this is the authoritative list of config keys, which ones are mandatory, and
@@ -27,12 +27,12 @@ edits the docs itself.
 
 For **CLAUDE.md**, **README.md**, and **QUICKSTART.md** in turn:
 
-- **Command table drift:** does the doc list every command in `.claude/commands/`? Does
+- **Command table drift:** does the doc list every command in `commands/`? Does
   it list any command that no longer has a matching file (renamed/deleted)? Does its
   one-line description of each command still roughly match that command file's own
   `description:`?
 - **Role table drift:** does the doc's role table (Arbiter/Engineer/Security/Verifier/
-  Realist) match the **permanent-pipeline** agents in `.claude/agents/*.md` — same five
+  Realist) match the **permanent-pipeline** agents in `agents/*.md` — same five
   files, same rough job description? Flag a doc that still describes an older, smaller
   council (e.g. missing the Verifier) or otherwise omits a pipeline role that has a real
   agent file. A manual, non-cycle agent (e.g. `retrospective.md`, called out in its own

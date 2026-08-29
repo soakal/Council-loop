@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/hooks/validate_after_edit.sh"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/validate_after_edit.sh\""
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/hooks/guard_state_and_secrets.sh"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/guard_state_and_secrets.sh\""
           }
         ]
       }
