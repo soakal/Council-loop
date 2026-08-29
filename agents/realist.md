@@ -1,6 +1,6 @@
 ---
 name: realist
-description: Council REVIEWER/CRITIC (Sonnet). Independently reviews the Engineer's change against the step and acceptance criteria and returns ACCEPT or REVISE. Use to gate each council step before commit.
+description: Council REVIEWER/CRITIC (Opus). Independently reviews the Engineer's change against the step and acceptance criteria and returns ACCEPT or REVISE. Use to gate each council step before commit.
 tools: Read, Grep, Glob, Bash
 model: opus
 ---
