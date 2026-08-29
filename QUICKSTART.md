@@ -24,10 +24,16 @@ project — it doesn't live inside one special folder anymore.
 2. **Open the project you want it to work on** (just `cd` there and start Claude Code,
    or see the optional launcher below).
 3. Type your job:
-   `/goal <what you want>. Acceptance: <how you'll know it's done>`
-4. Type: `/loop /council-cycle` and let it work.
+   `/council-loop:goal <what you want>. Acceptance: <how you'll know it's done>`
+4. Type: `/loop /council-loop:council-cycle` and let it work.
 
 That's the whole thing. The rest of this page just explains each part.
+
+*(Commands install namespaced as `/council-loop:<command>`. If you only have Council
+Loop's skills/plugins loaded and nothing else uses the same names, the short form —
+`/goal`, `/council-cycle` — may also work; this page uses the short form after this
+point for readability, but the `council-loop:`-prefixed form is the one guaranteed to
+work.)*
 
 ---
 
@@ -55,7 +61,7 @@ Claude Code there with Council Loop ready to go.
 Type a goal. Always include an **"Acceptance:"** part — that's how it knows when to stop:
 
 ```
-/goal Add a contact form to the website. Acceptance: it checks the email is valid, shows a "thanks!" message, and the tests pass.
+/council-loop:goal Add a contact form to the website. Acceptance: it checks the email is valid, shows a "thanks!" message, and the tests pass.
 ```
 
 Think of "Acceptance" as *"what does done look like?"* (This is also the moment Council
@@ -63,7 +69,7 @@ Loop sets itself up in this project, if it hasn't already.)
 
 ### Step 3 — Let it run
 ```
-/loop /council-cycle
+/loop /council-loop:council-cycle
 ```
 Now it works by itself — planning, coding, checking, and saving each good step into your
 project. **It stops on its own** when the job is done or it hits a limit you set.

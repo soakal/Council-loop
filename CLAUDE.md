@@ -16,6 +16,14 @@ why every script invocation in this file uses `${CLAUDE_PLUGIN_ROOT}/scripts/...
 placeholder is Claude Code's own substitution for wherever this plugin is installed,
 which is *not* the same directory the command is actually operating on.
 
+**Commands are namespaced as `/council-loop:<command>`** (e.g. `/council-loop:goal`,
+`/council-loop:council-cycle`) once installed via a marketplace — verified directly:
+a bare `/council-doctor` returns `Unknown command` in a fresh `claude --plugin-dir`
+session with other skills/plugins loaded, while `/council-loop:council-doctor` runs
+correctly. This file uses the short form (`/goal`, `/council-cycle`) throughout for
+readability, matching how self-hosted/`--plugin-dir`-only sessions with no naming
+collision may resolve it, but the namespaced form is the one guaranteed to work.
+
 ## The council (five permanent roles = five subagents)
 
 | Role | Subagent | Model | Job |

@@ -51,12 +51,13 @@ that run in parallel with a per-agent timeout; every spawn is logged and shown i
 
 3. **Set a goal:**
    ```
-   /goal Add input validation to the signup form. Acceptance: empty/invalid email is rejected with a message; tests pass.
+   /council-loop:goal Add input validation to the signup form. Acceptance: empty/invalid email is rejected with a message; tests pass.
    ```
+   (Commands install namespaced as `/council-loop:<command>` — see the note below.)
 
 4. **Run it autonomously:**
    ```
-   /loop /council-cycle
+   /loop /council-loop:council-cycle
    ```
    Each cycle: Arbiter plans the next step → Engineer implements it → Security audits it
    (auto-fixing low-severity findings, blocking on high) → the Verifier adds and runs a
@@ -72,6 +73,13 @@ that run in parallel with a per-agent timeout; every spawn is logged and shown i
 
 6. **Diagnose setup:** `/council-doctor` checks config, target git state, tools, models,
    history, and likely test commands before you start an unattended run.
+
+> **Namespacing note:** installed via the marketplace, commands resolve as
+> `/council-loop:<command>` (verified directly: a bare `/council-doctor` returns
+> `Unknown command` in a session with other skills/plugins loaded, `/council-loop:council-doctor`
+> runs correctly). The rest of this README uses the short form (`/goal`, `/council-cycle`,
+> `/council-status`, `/stop`, …) for readability — if the bare form doesn't resolve for
+> you, prefix it with `council-loop:`.
 
 ## The run ceiling (replaces the old dollar cap)
 
