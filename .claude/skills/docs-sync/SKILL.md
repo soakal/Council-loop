@@ -32,9 +32,13 @@ For **CLAUDE.md**, **README.md**, and **QUICKSTART.md** in turn:
   one-line description of each command still roughly match that command file's own
   `description:`?
 - **Role table drift:** does the doc's role table (Arbiter/Engineer/Security/Verifier/
-  Realist) match `.claude/agents/*.md` — same five files, same rough job description?
-  Flag a doc that still describes an older, smaller council (e.g. missing the Verifier)
-  or otherwise omits a role that has a real agent file.
+  Realist) match the **permanent-pipeline** agents in `.claude/agents/*.md` — same five
+  files, same rough job description? Flag a doc that still describes an older, smaller
+  council (e.g. missing the Verifier) or otherwise omits a pipeline role that has a real
+  agent file. A manual, non-cycle agent (e.g. `retrospective.md`, called out in its own
+  frontmatter as never invoked by `/council-cycle`) is a different kind of thing and does
+  **not** belong in this same five-role table — check instead that it's mentioned
+  *somewhere* in the doc, not that it's folded into the pipeline table.
 - **Config key drift:** does the doc mention every config key from `config.schema.json`
   that's meaningfully user-facing? Does it claim a key exists that isn't actually in the
   schema? Does a stated default disagree with the schema's `description` or with

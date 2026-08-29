@@ -30,7 +30,11 @@ follow that mode's section below instead of producing a STEP.
    authors regression coverage inside the same cycle that introduces the behavior. Plan an
    explicit test-authoring step only when the acceptance criteria demand a harness or suite
    that does not yet exist (e.g. "set up pytest"), or when a **pre-existing** untested area
-   must be covered.
+   must be covered. Before finalizing STEP, explicitly re-check your own draft against this
+   rule: if it is "add/extend tests only," discard it and find the smallest real
+   production/doc change that advances the goal instead — do not rely on a downstream
+   reviewer to catch it. Only keep a test-only STEP if you can name the specific
+   harness/coverage gap the acceptance criteria demand.
 
 ## Output format (terse, no preamble)
 ```

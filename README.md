@@ -186,23 +186,29 @@ paths from their own location, so nothing else needs editing.
 ```
 .claude/
   agents/    arbiter.md · engineer.md · security.md · verifier.md · realist.md   # the five council roles
+             retrospective.md   # manual, cross-run analysis agent -- not part of any cycle
   commands/  goal.md · council-cycle.md · council-status.md · council-doctor.md
              council-repair.md · council-rollback.md · forge-skill.md · stop.md
-  skills/    # reusable skills authored mid-run by /forge-skill
+  skills/    docs-sync/ · council-loop-status-check/ · reusable skills authored mid-run by /forge-skill
 .council/
   config.json · config.example.json · config.schema.json
-  state/     # goal.md · history.jsonl · stop.flag · transcripts/  (runtime, gitignored)
+  state/     # goal.md · history.jsonl · dynamic-agents.jsonl · cycle.lock · stop.flag
+             # transcripts/ · archive/<started_at>/ (prior runs, moved here by /goal)
+             # all of the above: runtime, gitignored
 scripts/
-  validate.sh        # lightweight repository smoke checks
-  council_state.py   # deterministic config/history helper used by commands
-  council_doctor.py  # command-line health checks
-  discover_tests.py  # common test command discovery
+  validate.sh            # lightweight repository smoke checks
+  council_state.py       # deterministic config/history/lock helper used by commands
+  council_doctor.py      # command-line health checks
+  discover_tests.py      # common test command discovery
+  postmortem_payload.py  # gathers raw git data for NEXUS's post-mortem trigger
 CLAUDE.md          # project memory / rules for the loop
 QUICKSTART.md      # plain-English getting-started guide
 start-council.cmd  # double-click launcher (opens Claude Code in this folder)
 start-council.sh   # Unix launcher equivalent
 set-target.ps1     # set target_repo without hand-editing JSON
 set-target.sh      # Unix target_repo helper equivalent
+run-loop.ps1       # unattended Windows driver (loops /council-cycle until stop.flag)
+run-loop.sh        # unattended Linux/macOS driver equivalent
 ```
 
 ## Skill authoring mid-run

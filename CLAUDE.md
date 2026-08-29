@@ -35,6 +35,15 @@ Models above are the frontmatter fallbacks; the effective `models` value —
 overrides them per run. Machine-specific model overrides (e.g. a trial model) belong in
 `config.local.json`, never in tracked files.
 
+### Retrospective (manual, cross-run, sixth agent — not part of any cycle)
+`.claude/agents/retrospective.md` is a read-only analysis agent, invoked by hand whenever
+you want a cross-run view — which role burns the revise budget, what the Verifier's skip
+reasons actually cite, which dynamic-agent domains time out, what the Realist rejects
+most often — sourced from `history.jsonl` (current run **and** every archived run under
+`.council/state/archive/`), transcripts, and driver logs. It ends with suggested edits to
+the other five agents' prompts. `/council-cycle` never invokes it and it has no gating
+role; nothing about it changes cycle behavior.
+
 ## Commands
 
 | Command | What it does |
