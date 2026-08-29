@@ -124,9 +124,10 @@ checkout with no local overrides yet, but easy to hit by accident). Every
 found to stderr — check that line if a run's ceiling/model overrides don't seem to be
 taking effect.
 
-> `set-target.ps1`/`set-target.sh` predate the plugin conversion and haven't been
-> updated for it yet (same as `start-council.cmd`/`start-council.sh` below) — for now,
-> edit `.council/config.local.json` by hand in the active project.
+> `set-target.ps1 "C:\path\to\repo" ["C:\path\to\project"]` / `./set-target.sh
+> "/path/to/repo" [/path/to/project]` write this for you — `project` defaults to the
+> current directory. Run with no repo argument to just report the effective
+> `target_repo` for a project.
 
 To run the council against a repo you don't have locally: clone it, set `target_repo` to
 its path. The council commits into **that** repo's history.
@@ -195,13 +196,21 @@ downloadable assets on the [latest release](https://github.com/soakal/Council-lo
 — they ship inside a plugin install too, but aren't easy to find inside a plugin
 cache directory once installed that way.
 
-> **Legacy launchers, not yet updated for the plugin model:** `start-council.cmd`,
-> `start-council.sh`, `set-target.ps1`, and `set-target.sh` all predate this conversion —
-> they assumed the whole toolkit and the project being worked on were the same folder,
-> which is no longer how this works. They still exist in this repo but don't reflect the
-> plugin-based flow above; treat them as pending a redesign, not as the current
-> recommended path. (`run-loop.ps1`/`run-loop.sh` above have already been redesigned —
-> this note is about the other four.)
+### Optional launcher: start-council
+
+`start-council.cmd`/`start-council.sh` open Claude Code in a target project with this
+plugin's own local copy loaded (`--plugin-dir`), so the council commands work even
+without a marketplace install:
+
+```powershell
+start-council.cmd "C:\path\to\your\project"
+```
+```bash
+./start-council.sh /path/to/your/project
+```
+
+Both default to the current directory if no project is given. On Windows you can also
+just drag a project folder onto `start-council.cmd`.
 
 ## Layout
 
@@ -229,10 +238,11 @@ scripts/
   hooks/                 # scripts backing hooks/hooks.json
 CLAUDE.md          # project memory / rules for the loop
 QUICKSTART.md      # plain-English getting-started guide (currently stale -- see note above)
-start-council.cmd  # legacy pre-plugin launcher -- see note above
-start-council.sh   # legacy pre-plugin launcher -- see note above
-set-target.ps1     # legacy pre-plugin launcher -- see note above
-set-target.sh      # legacy pre-plugin launcher -- see note above
+start-council.cmd  # optional launcher: opens Claude Code in a target project with
+                   # this plugin's local copy loaded (--plugin-dir)
+start-council.sh   # optional launcher equivalent
+set-target.ps1     # writes target_repo into a target project's config.local.json
+set-target.sh      # optional helper equivalent
 run-loop.ps1       # unattended Windows driver -- loops /council-cycle against a
                    # -TargetDir project (default: cwd), never against its own location
 run-loop.sh        # unattended Linux/macOS driver equivalent

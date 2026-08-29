@@ -1,15 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Point Council Loop at the repo it should work on without editing tracked config.
-# Writes .council/config.local.json, which overrides .council/config.json locally.
+# Point Council Loop, for a given PROJECT, at the repo it should work on -- without
+# hand-editing JSON. Writes PROJECT/.council/config.local.json (overrides
+# PROJECT/.council/config.json locally). PROJECT defaults to the current directory:
+# Council Loop is a plugin whose state belongs to whichever project you're actually
+# working in, never to wherever this script (or the plugin itself) happens to live.
+#
+# Usage:
+#   ./set-target.sh                                        # report cwd's effective target_repo
+#   ./set-target.sh "/path/to/your/repo"                   # set it, project = cwd
+#   ./set-target.sh "/path/to/your/repo" /path/to/project   # set it for a specific project
 
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-cfg_path="$script_dir/.council/config.json"
-local_path="$script_dir/.council/config.local.json"
+project_dir="${2:-$(pwd)}"
+if [[ ! -d "$project_dir" ]]; then
+  echo "Project directory does not exist: $project_dir" >&2
+  exit 1
+fi
+project_dir="$(cd -- "$project_dir" && pwd)"
+cfg_path="$project_dir/.council/config.json"
+local_path="$project_dir/.council/config.local.json"
 
 if [[ ! -f "$cfg_path" ]]; then
-  echo "Config not found: $cfg_path" >&2
+  echo "No .council/config.json in $project_dir yet -- run /goal there first (it bootstraps one)." >&2
   exit 1
 fi
 
@@ -43,7 +56,8 @@ if effective:
 else:
     print(f"Warning: could not find target_repo in {cfg_path} or {local_path}", file=sys.stderr)
 PY
-  echo 'Usage: ./set-target.sh "/path/to/your/repo"   (or "." for this folder)'
+  echo "Project: $project_dir"
+  echo 'Usage: ./set-target.sh "/path/to/your/repo" [project-dir]   (or "." for the project itself)'
   exit 0
 fi
 
@@ -94,4 +108,4 @@ data["target_repo"] = target
 local_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 
-echo "target_repo set to: $normalized  (written to .council/config.local.json)"
+echo "target_repo set to: $normalized  (written to $local_path)"

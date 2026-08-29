@@ -1,22 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Open Claude Code from this folder so the council commands and agents load.
+# Open Claude Code in a target PROJECT, with this plugin's own local copy loaded via
+# --plugin-dir, so /goal, /council-cycle, /council-status, and the council agents are
+# all available -- whether or not Council Loop is separately installed via a
+# marketplace. PROJECT defaults to the current directory.
+#
+# Usage: ./start-council.sh [/path/to/your/project]
 
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-cd "$script_dir"
+plugin_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+project_dir="${1:-$(pwd)}"
+
+if [[ ! -d "$project_dir" ]]; then
+  echo "Project directory does not exist: $project_dir" >&2
+  exit 1
+fi
+project_dir="$(cd -- "$project_dir" && pwd)"
+cd "$project_dir"
 
 target="$(
-  python3 - "$script_dir/.council/config.json" "$script_dir/.council/config.local.json" <<'PY'
+  python3 - "$project_dir/.council/config.json" "$project_dir/.council/config.local.json" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 cfg_path = Path(sys.argv[1])
 local_path = Path(sys.argv[2])
+
+if not cfg_path.exists():
+    print("(not set up yet -- run /goal to get started)")
+    raise SystemExit
+
 target = None
 source = "config.json"
-
 try:
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
     target = cfg.get("target_repo")
@@ -40,8 +56,9 @@ PY
 echo
 echo "  Council Loop"
 echo "  ------------"
-echo "  Folder : $PWD"
-echo "  Target : $target"
+echo "  Project : $project_dir"
+echo "  Target  : $target"
+echo "  Plugin  : $plugin_dir"
 echo
 echo "  Next:  /goal <objective>. Acceptance: <criteria>"
 echo "         /loop /council-cycle"
@@ -53,4 +70,4 @@ if ! command -v claude >/dev/null 2>&1; then
   exit 1
 fi
 
-exec claude
+exec claude --plugin-dir "$plugin_dir"

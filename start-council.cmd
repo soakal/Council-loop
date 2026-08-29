@@ -1,20 +1,37 @@
 @echo off
 REM ============================================================
 REM  Council Loop launcher
-REM  Double-click this file to open Claude Code in this folder,
-REM  so /goal, /council-cycle, /council-status and the council
-REM  agents are all available. Works no matter where the folder
-REM  lives (uses this script's own location).
+REM  Opens Claude Code in a target PROJECT, with this plugin's own
+REM  local copy loaded (--plugin-dir), so /goal, /council-cycle,
+REM  /council-status and the council agents are all available --
+REM  whether or not Council Loop is separately installed via a
+REM  marketplace.
+REM
+REM  Double-click with no argument: uses the current directory as
+REM  the project. Drag a project folder onto this file, or pass
+REM  its path as an argument, to target that folder instead.
 REM ============================================================
 
-cd /d "%~dp0"
+set "PLUGIN_DIR=%~dp0"
+set "PROJECT_DIR=%~1"
+if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%CD%"
+
+if not exist "%PROJECT_DIR%" (
+  echo Project directory does not exist: %PROJECT_DIR%
+  pause
+  exit /b 1
+)
+
+cd /d "%PROJECT_DIR%"
+
 set "TARGET_REPO="
-for /f "usebackq delims=" %%T in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$cfg = Join-Path $PWD '.council\config.json'; $localPath = Join-Path $PWD '.council\config.local.json'; $target = $null; $source = 'config.json'; try { $base = Get-Content $cfg -Raw | ConvertFrom-Json; $target = $base.target_repo } catch { $target = '<could not read config.json>' }; if (Test-Path $localPath) { try { $local = Get-Content $localPath -Raw | ConvertFrom-Json; if ($local.PSObject.Properties.Name -contains 'target_repo') { $target = $local.target_repo; $source = 'config.local.json' } } catch { $target = '<could not read config.local.json>'; $source = 'config.local.json' } }; Write-Output ($target + '  (from ' + $source + ')')"`) do set "TARGET_REPO=%%T"
+for /f "usebackq delims=" %%T in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$cfg = Join-Path $PWD '.council\config.json'; $localPath = Join-Path $PWD '.council\config.local.json'; if (-not (Test-Path $cfg)) { Write-Output '(not set up yet -- run /goal to get started)' } else { $target = $null; $source = 'config.json'; try { $base = Get-Content $cfg -Raw | ConvertFrom-Json; $target = $base.target_repo } catch { $target = '<could not read config.json>' }; if (Test-Path $localPath) { try { $local = Get-Content $localPath -Raw | ConvertFrom-Json; if ($local.PSObject.Properties.Name -contains 'target_repo') { $target = $local.target_repo; $source = 'config.local.json' } } catch { $target = '<could not read config.local.json>'; $source = 'config.local.json' } }; Write-Output ($target + '  (from ' + $source + ')') }"`) do set "TARGET_REPO=%%T"
 echo.
 echo   Council Loop
 echo   ------------
-echo   Folder : %CD%
-echo   Target : %TARGET_REPO%
+echo   Project : %PROJECT_DIR%
+echo   Target  : %TARGET_REPO%
+echo   Plugin  : %PLUGIN_DIR%
 echo.
 echo   Next:  /goal ^<objective^>. Acceptance: ^<criteria^>
 echo          /loop /council-cycle
@@ -29,4 +46,4 @@ if errorlevel 1 (
   exit /b 1
 )
 
-claude
+claude --plugin-dir "%PLUGIN_DIR%"
