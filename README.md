@@ -190,6 +190,11 @@ run's own log file all live there, never inside this plugin's own install locati
 and pass `--plugin-dir <their own location>` to every `claude -p` call so the loop
 works whether or not Council Loop is separately installed via a marketplace.
 
+**Just want the two driver scripts, without cloning the repo?** They're attached as
+downloadable assets on the [latest release](https://github.com/soakal/Council-loop/releases/latest)
+— they ship inside a plugin install too, but aren't easy to find inside a plugin
+cache directory once installed that way.
+
 > **Legacy launchers, not yet updated for the plugin model:** `start-council.cmd`,
 > `start-council.sh`, `set-target.ps1`, and `set-target.sh` all predate this conversion —
 > they assumed the whole toolkit and the project being worked on were the same folder,
