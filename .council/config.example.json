@@ -9,7 +9,7 @@
   "models": {
     "arbiter": "opus",
     "engineer": "sonnet",
-    "realist": "sonnet",
+    "realist": "opus",
     "security": "sonnet",
     "verifier": "sonnet"
   },

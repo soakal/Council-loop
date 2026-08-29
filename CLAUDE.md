@@ -24,7 +24,7 @@ which is *not* the same directory the command is actually operating on.
 | **Engineer** | `agents/engineer.md` | Sonnet | Implements exactly that one step (minimal diff). Never commits. |
 | **Security** | `agents/security.md` | Sonnet | Audits the cycle's diff after the Engineer: bandit + pip-audit (where applicable) + LLM vuln hunt. Auto-fixes LOW findings; HIGH findings escalate to the Engineer and block the cycle. |
 | **Verifier** | `agents/verifier.md` | Sonnet | QA. After Security, reads the cycle's diff and — when the step changes real behavior — authors or extends ONE focused test that pins that behavior down, runs it, and reports. Edits test/verification files only; a genuine failure escalates to the Engineer and blocks the cycle. Skips (with a cited reason) on docs/config-only diffs, already-covered behavior, or no harness. |
-| **Realist** | `agents/realist.md` | Sonnet | Independently reviews → `ACCEPT` / `REVISE`. The brake before commit. |
+| **Realist** | `agents/realist.md` | Opus | Independently reviews → `ACCEPT` / `REVISE`. The brake before commit — the highest-leverage seat for reasoning quality alongside the Arbiter, since a missed defect here ships, not just wastes a cycle. |
 
 ### Dynamic agents (temporary, per-cycle)
 Any permanent agent can emit `SPAWN_REQUEST: <domain> — <reason>` lines; the Arbiter

@@ -11,7 +11,7 @@ belongs to whichever project you're actually working in, not to wherever the plu
 itself lives.
 
 ```
-Arbiter (Opus) → Engineer (Sonnet) → Security (Sonnet) → Verifier (Sonnet) → Realist (Sonnet) → commit
+Arbiter (Opus) → Engineer (Sonnet) → Security (Sonnet) → Verifier (Sonnet) → Realist (Opus) → commit
     plan            implement          audit + fix         test + prove        review/critique
                                                                 ↕
                                                dynamic specialist agents (parallel,
