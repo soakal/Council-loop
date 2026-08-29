@@ -69,6 +69,26 @@ role; nothing about it changes cycle behavior.
 - `.council/state/transcripts/` — optional readable cycle transcripts (runtime, gitignored).
 - `.council/state/stop.flag` — presence halts `/loop`; contents = reason (runtime, gitignored).
 
+## Repo-hardening hooks
+
+`.claude/settings.json` (tracked, applies to anyone working in this repo) wires two hooks,
+each a real script under `scripts/hooks/` rather than an inline command, so they're
+directly testable (`echo '<payload-json>' | bash scripts/hooks/<name>.sh`):
+- **PostToolUse** (`validate_after_edit.sh`, matcher `Edit|Write|MultiEdit`): after a change
+  to `.council/config*.json` or a `.claude/agents/*.md`/`.claude/commands/*.md` file,
+  re-runs `scripts/validate.sh` so config/schema/example or frontmatter drift surfaces
+  immediately instead of at the next failed cycle. A real failure exits non-zero
+  (never suppressed) so it's visible; a non-matching file is a silent no-op.
+- **PreToolUse** (`guard_state_and_secrets.sh`, matcher `Edit|Write|MultiEdit`): denies
+  (via `permissionDecision: deny`, never a raw non-zero exit) two things the rest of this
+  file already states as policy — a direct Edit/Write/MultiEdit on
+  `.council/state/history.jsonl` (must only be written via `council_state.py`'s
+  `append-history`/`repair-history`), and writing an actual assignment of the NEXUS auth
+  key or a Tailscale-style URL/IP (a `.ts.net` hostname reached over `http(s)`, or the
+  Tailscale CGNAT range, roughly `100.64/10`) into a file `git ls-files` reports as
+  tracked — a bare mention of either concept in prose is left alone. Writing the same
+  into `.council/config.local.json` (gitignored) is exactly what that file is for.
+
 ## Rules for the loop (important)
 
 - **`target_repo`** is where all edits and commits land. `"."` means *this* project directory (self-hosting / demo); for real work point it at another repo's absolute path.

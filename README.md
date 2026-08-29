@@ -189,7 +189,8 @@ paths from their own location, so nothing else needs editing.
              retrospective.md   # manual, cross-run analysis agent -- not part of any cycle
   commands/  goal.md · council-cycle.md · council-status.md · council-doctor.md
              council-repair.md · council-rollback.md · forge-skill.md · stop.md
-  skills/    docs-sync/ · council-loop-status-check/ · reusable skills authored mid-run by /forge-skill
+  skills/    docs-sync/ · loop-log-triage/ · council-loop-status-check/ · reusable skills authored mid-run by /forge-skill
+  settings.json   # tracked repo-hardening hooks -- see CLAUDE.md
 .council/
   config.json · config.example.json · config.schema.json
   state/     # goal.md · history.jsonl · dynamic-agents.jsonl · cycle.lock · stop.flag
@@ -201,6 +202,7 @@ scripts/
   council_doctor.py      # command-line health checks
   discover_tests.py      # common test command discovery
   postmortem_payload.py  # gathers raw git data for NEXUS's post-mortem trigger
+  hooks/                 # scripts backing .claude/settings.json's hooks
 CLAUDE.md          # project memory / rules for the loop
 QUICKSTART.md      # plain-English getting-started guide
 start-council.cmd  # double-click launcher (opens Claude Code in this folder)

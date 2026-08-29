@@ -80,6 +80,7 @@ try:
     urllib.request.urlopen(req, timeout=5)
 except Exception as e:
     print(f"brain event emit failed: {e}", file=sys.stderr)
+    sys.exit(1)
 ' "$brain_url" "event-council-loop-run-complete-${file_ts}.md" <<< "$content" \
                     && log "Brain event emitted: event-council-loop-run-complete-${file_ts}.md" \
                     || log "brain event emit skipped"
