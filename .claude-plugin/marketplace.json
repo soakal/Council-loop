@@ -1,5 +1,6 @@
 {
   "name": "council-loop-marketplace",
+  "description": "Single-plugin marketplace for Council Loop, an autonomous five-role coding council for Claude Code.",
   "owner": {
     "name": "CWI AI",
     "url": "https://github.com/soakal"
