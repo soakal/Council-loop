@@ -2,7 +2,7 @@
   "name": "council-loop",
   "displayName": "Council Loop",
   "description": "Autonomous plan -> implement -> audit -> test -> review -> commit cycle driven by a five-role council (Arbiter, Engineer, Security, Verifier, Realist), running entirely on Claude Code primitives -- no direct Anthropic API calls, no per-token billing.",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": {
     "name": "CWI AI",
     "url": "https://github.com/soakal"
