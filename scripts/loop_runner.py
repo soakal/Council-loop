@@ -21,10 +21,11 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -38,7 +39,9 @@ from loop_tasks import TaskStore, TaskStoreError, atomic_write_json, try_lock, u
 PROTECTED_BASE_BRANCHES = ("main", "master")
 JOURNAL = Path(".council") / "state" / "run-journal.json"
 TAIL_CHARS = 2000  # how much check output is kept in a task's reason
-CAP_KEYS = ("max_attempts", "max_sessions", "max_hours", "session_timeout_minutes", "verify_timeout_minutes")
+# Loop settings frozen at claim time; a change mid-task blocks it ("verification inputs changed").
+CAP_KEYS = ("max_attempts", "max_sessions", "max_hours", "session_timeout_minutes", "verify_timeout_minutes",
+            "permission_mode", "allowed_tools")
 
 
 class GitError(RuntimeError):
@@ -109,6 +112,12 @@ def _spawn(cmd, cwd, timeout: float, env=None, shell: bool = False,
             with contextlib.suppress(subprocess.TimeoutExpired):
                 proc.wait(timeout=10)
             code = None
+        except BaseException:
+            # Ctrl-C / SIGTERM (SystemExit) while waiting: never leave the tree running.
+            _kill_tree(proc)
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                proc.wait(timeout=10)
+            raise
         else:
             if os.name != "nt":
                 # Also clear anything the command left running in its group.
@@ -312,6 +321,9 @@ def gate(repo, task: dict, cfg: dict, frozen: dict, deadline: float | None, task
     timeout = (caps.get("verify_timeout_minutes") or 30) * 60
     sha = run_git(repo, "rev-parse", "HEAD")
     ok, tail = _run_checks(repo, checks, timeout, deadline)
+    if ok and base and run_git(repo, "rev-list", "--count", f"{base}..{branch}") == "0":
+        # Nothing was built: base's own tip passing its checks must never make a task done.
+        return result(fail, "no commits on task branch")
     if ok:
         return result("done", "", sha)
     return result(fail, f"verify failed on {sha[:12]}: {tail}", None, tail)
@@ -457,9 +469,7 @@ def finish_task(repo, store, task: dict, cfg: dict, frozen: dict, deadline: floa
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 STATE = Path(".council") / "state"
 CYCLE_PROMPT = "/council-loop:council-cycle"
-# Paths loop runs write at runtime, plus common tool junk; kept out of git so the
-# council's clean-tree check never trips on them. T8's `loop init` calls ensure_excludes.
-RUNTIME_EXCLUDES = ("tasks/", "logs/", ".council/state/", ".council/config.json", ".council/config.local.json")
+# Common tool junk, kept out of git anywhere in the tree (unanchored on purpose).
 JUNK_EXCLUDES = ("__pycache__/", "*.pyc", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/",
                  "node_modules/", ".coverage")
 
@@ -472,19 +482,41 @@ FAILURE_KINDS = (
     ("api_error", re.compile(r"(?i)api error|internal server error|\b50[0-4]\b|ECONN\w*|ETIMEDOUT|"
                              r"network|fetch failed|socket hang up|connection (?:reset|refused|error)")),
 )
+# Classified in a session's result text even when exit code / is_error say success.
+SOFT_FAILURES = ("usage_limit", "rate_limit", "overloaded")
+# stop.flag values that end an attempt and get gated; any other non-"goal complete" flag blocks.
+CEILING_FLAGS = ("max_cycles reached", "max_minutes reached")
 RESET_CLOCK = re.compile(r"(?i)resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap]m)(?:\s*\(([^)]+)\))?")
 RESET_EPOCH = re.compile(r"(?i)(?:limit|reset)[^\n]{0,40}?\b(1[6-9]\d{8})\b")
 
 
-def ensure_excludes(repo, extra=()) -> list[str]:
-    """Add runtime + junk paths to .git/info/exclude (idempotent). Returns the lines added."""
+def runtime_excludes(cfg: dict | None = None) -> list[str]:
+    """Root-anchored exclude patterns for what loop runs write (tasks, logs, state, local config).
+
+    Anchored so a project's own src/tasks/ or app/logs/ is never hidden from git.
+    """
+    loop = (cfg or {}).get("loop") or {}
+    tasks = PurePosixPath(Path(loop.get("tasks_file") or "tasks/tasks.json").as_posix())
+    logs = PurePosixPath(Path(loop.get("logs_dir") or "logs").as_posix())
+    if str(tasks.parent) not in ("", "."):
+        task_pats = [f"/{tasks.parent}/"]
+    else:  # tasks file at the project root: the file, its lock and atomic-write temp files
+        task_pats = [f"/{tasks.name}", f"/{tasks.stem}.lock", f"/.{tasks.name}.*.tmp"]
+    return [*task_pats, f"/{logs}/", "/.council/state/", "/.council/config.json", "/.council/config.local.json"]
+
+
+def ensure_excludes(repo, cfg: dict | None = None, extra=()) -> list[str]:
+    """Add runtime (anchored) + junk paths to .git/info/exclude (idempotent). Returns the lines added.
+
+    T8's `loop init` calls this; the runner itself only checks (unexcluded_paths).
+    """
     path = Path(run_git(repo, "rev-parse", "--git-path", "info/exclude"))
     if not path.is_absolute():
         path = Path(repo) / path
     path.parent.mkdir(parents=True, exist_ok=True)
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     have = {line.strip() for line in text.splitlines()}
-    added = [p for p in (*RUNTIME_EXCLUDES, *JUNK_EXCLUDES, *extra) if p not in have]
+    added = [p for p in (*runtime_excludes(cfg), *JUNK_EXCLUDES, *extra) if p not in have]
     if added:
         sep = "" if not text or text.endswith("\n") else "\n"
         path.write_text(text + sep + "# council loop runtime\n" + "\n".join(added) + "\n", encoding="utf-8")
@@ -497,10 +529,15 @@ def unexcluded_paths(repo, cfg: dict) -> list[str]:
     tasks = Path(loop.get("tasks_file") or "tasks/tasks.json")
     probes = [tasks.as_posix(), tasks.with_suffix(".lock").as_posix(),
               (Path(loop.get("logs_dir") or "logs") / "loop.jsonl").as_posix(),
-              (STATE / "run.lock").as_posix()]
+              (STATE / "run.lock").as_posix(), ".council/config.json", ".council/config.local.json"]
     return [p for p in probes
             if subprocess.run(["git", "-C", str(repo), "check-ignore", "-q", "--no-index", p],
                               capture_output=True).returncode != 0]
+
+
+def _sigterm_to_exit(signum, frame):
+    """SIGTERM -> SystemExit, so the runner's normal cleanup (tree kill, hand back) runs."""
+    raise SystemExit(128 + signum)
 
 
 def classify_failure(text: str) -> str:
@@ -572,7 +609,10 @@ class Runner:
     run() returns {exit_code, stop_reason, sessions, counts, run_id}. Exit codes:
       0  no cap hit, no task failed, no pending/claimed task left (blocked tasks are fine:
          each one was escalated). With once=True, pending tasks left over are fine too.
-      1  a cap (max_sessions / max_hours) was hit, or a task is failed / still pending.
+      1  a cap (max_sessions / max_hours) was hit, a task is failed / still pending, or the
+         runner hit an unexpected error (logged + escalated as "crash"; task handed back).
+    SIGTERM / Ctrl-C: the session tree is killed, the task handed back, then SystemExit /
+    KeyboardInterrupt propagates.
       2  startup refused: bad config, loop-mode refusal, runtime paths not git-excluded,
          or another runner holds run.lock. Nothing was changed; no end-of-run hooks.
     """
@@ -673,10 +713,15 @@ class Runner:
             self._ev("recover", None, "merge_aborted")
         claimed = [t for t in self.store.load() if t["status"] == "claimed"]
         self._stash_if_dirty(claimed[0]["id"] if claimed else None, "crash recovery")
+        journal_bad = False
         try:
             journal = json.loads((repo / JOURNAL).read_text(encoding="utf-8"))
-        except (FileNotFoundError, json.JSONDecodeError):
+        except FileNotFoundError:
             journal = {}
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            journal, journal_bad = {}, True
+        if not isinstance(journal, dict):
+            journal, journal_bad = {}, True
         for task in claimed:
             tid, vsha = task["id"], task.get("verified_sha")
             if vsha and subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", vsha, base],
@@ -685,9 +730,16 @@ class Runner:
                 self.store.add_note(tid, f"recovered: {vsha[:12]} already merged into {base}")
                 self._ev("recover", tid, "done", verified_sha=vsha)
                 continue
+            if journal_bad:  # can't prove the inputs are unchanged
+                self._block(tid, "verification inputs changed: run journal unreadable")
+                continue
             if journal.get("task_id") == tid and journal.get("claimed_at") == task.get("claimed_at"):
                 # Compare BEFORE re-freezing, so a crash can't launder an edited tasks.json/config.
-                reason = inputs_tampered(self.store, cfg, journal.get("frozen") or {})
+                frozen = journal.get("frozen")
+                if not isinstance(frozen, dict) or frozen.get("task_id") != tid:
+                    reason = "verification inputs changed: run journal frozen copy is malformed"
+                else:
+                    reason = inputs_tampered(self.store, cfg, frozen)
                 if reason:
                     self._block(tid, reason)
                     continue
@@ -717,14 +769,19 @@ class Runner:
 
         loop = cfg["loop"]
         self.cfg, self.loop = cfg, loop
-        self.max_sessions = max_sessions or loop["max_sessions"]
-        hours = max_hours or loop["max_hours"]
+        # A command-line override may only LOWER a configured cap.
+        self.max_sessions = min(max_sessions or loop["max_sessions"], loop["max_sessions"])
+        hours = min(max_hours or loop["max_hours"], loop["max_hours"])
         self.deadline = self.clock() + float(hours) * 3600  # the ONE run deadline
         self.logs_dir = self.repo / loop["logs_dir"]
         self.log = get_logger(self.logs_dir, loop["log_max_bytes"], loop["log_backups"])
         self.store = TaskStore(self.repo / loop["tasks_file"])
         run_start = self.now().strftime("%Y-%m-%dT%H:%M:%SZ")
         stop = None
+        old_term = None
+        if threading.current_thread() is threading.main_thread():
+            # SIGTERM takes the same path as Ctrl-C: session tree killed, task handed back.
+            old_term = signal.signal(signal.SIGTERM, _sigterm_to_exit)
         try:
             self._ev("run", None, "start", max_sessions=self.max_sessions, max_hours=hours)
             self._recover(cfg)
@@ -734,7 +791,8 @@ class Runner:
                     break
                 task = self.store.claim(self.run_id)
                 if task is None:
-                    self.store.block_unreachable()
+                    for tid in self.store.block_unreachable():
+                        self.escalate("blocked", self._task(tid), "a dependency failed or is blocked")
                     stop = "no runnable task left"
                     break
                 stop = self._attempt_guarded(task)
@@ -748,7 +806,17 @@ class Runner:
             self._ev("run", None, "end", reason=stop, exit_code=exit_code, sessions=self.sessions, counts=counts)
             return {"exit_code": exit_code, "stop_reason": stop, "sessions": self.sessions, "counts": counts,
                     "run_id": self.run_id}
+        except Exception as exc:  # anything unexpected: logged + escalated, never a bare traceback
+            reason = f"runner crashed: {type(exc).__name__}: {exc}"
+            print(f"loop run: {reason}", file=sys.stderr)
+            with contextlib.suppress(Exception):
+                self._ev("run", None, "crash", reason=reason[:500])
+                self.escalate("crash", None, reason)
+            return {"exit_code": 1, "stop_reason": reason, "sessions": self.sessions, "counts": {},
+                    "run_id": self.run_id}
         finally:
+            if old_term is not None:
+                signal.signal(signal.SIGTERM, old_term)
             if self.end_hooks:
                 self._end_of_run(run_start)
             unlock(lock)
@@ -763,22 +831,35 @@ class Runner:
             if self._task(task["id"])["status"] in ("claimed", "pending"):
                 self._block(task["id"], f"git error: {exc}")
             return None
+        except BaseException:
+            # Crash, Ctrl-C or SIGTERM: the session tree is already dead (_spawn); hand the task back.
+            with contextlib.suppress(Exception):
+                if self.current is None:
+                    self.store.release(task["id"])  # claimed but never frozen
+                self._hand_back()
+            raise
         finally:
             self.current = None
+
+    def _hand_back(self) -> None:
+        """Task in progress -> pending (attempts kept), or blocked if its inputs were changed."""
+        if not self.current:
+            return
+        tid, frozen = self.current
+        if self._task(tid)["status"] == "claimed":
+            tampered = inputs_tampered(self.store, self._load_cfg(), frozen)
+            if tampered:
+                self._block(tid, tampered)
+            else:
+                self.store.release(tid)
+                self._ev("task", tid, "released")
 
     def _cap(self, reason: str) -> str:
         """A cap was hit: log, escalate, hand the task in progress back (or block it if tampered)."""
         self.cap_reason = reason
         self._ev("cap", self.current[0] if self.current else None, "stop", reason=reason)
         self.escalate("cap", None, reason)
-        if self.current:
-            tid, frozen = self.current
-            if self._task(tid)["status"] == "claimed":
-                tampered = inputs_tampered(self.store, self._load_cfg(), frozen)
-                if tampered:
-                    self._block(tid, tampered)
-                else:
-                    self.store.release(tid)
+        self._hand_back()
         return reason
 
     def _attempt(self, task: dict) -> str | None:
@@ -803,22 +884,25 @@ class Runner:
                 return self._cap("max_hours reached")
             self._clear_flags()
             self._stash_if_dirty(tid, "before session")
-            failed, text = self._session(tid)
+            failed, text, result = self._session(tid)
             flag = self._read_flag()
             if self._left() <= 0:
                 return self._cap("max_hours reached")
             if flag is not None:
                 self._clear_flags()
-                if flag.lower().startswith("blocked:"):
+                if flag.lower() == "goal complete" or flag.startswith(CEILING_FLAGS):
+                    # The attempt is over: gate it (a ceiling's work may still pass).
+                    self._finish(tid, frozen, flag)
+                else:
+                    # blocked: <reason>, or a council preflight stop (no goal set, bad config, ...).
                     self._block(tid, flag)
-                    return None
-                # goal complete, a ceiling or any other stop ends the attempt: gate it anyway.
-                self._finish(tid, frozen, flag)
                 return None
             tampered = inputs_tampered(self.store, self._load_cfg(), frozen)
             if tampered:
                 self._block(tid, tampered)
                 return None
+            if not failed and classify_failure(result) in SOFT_FAILURES:
+                failed = True  # e.g. a limit message with exit 0 and is_error false
             if failed:
                 wait = self._backoff(n, text)
                 n += 1
@@ -869,11 +953,14 @@ class Runner:
         wait = min(b["base_seconds"] * 2 ** n, b["max_seconds"])
         return wait * (1 + random.uniform(-b["jitter"], b["jitter"]))
 
-    def _session(self, tid: str) -> tuple[bool, str]:
-        """Launch one `claude -p` council cycle. Returns (failed, text to classify)."""
+    def _session(self, tid: str) -> tuple[bool, str, str]:
+        """Launch one `claude -p` council cycle. Returns (failed, text to classify, result text)."""
         loop = self.loop
         exe = shutil.which(loop["claude_bin"]) or loop["claude_bin"]
-        argv = [exe, "-p", CYCLE_PROMPT, "--plugin-dir", str(PLUGIN_ROOT), "--output-format", "json"]
+        argv = [exe, "-p", CYCLE_PROMPT, "--plugin-dir", str(PLUGIN_ROOT),
+                "--permission-mode", loop["permission_mode"], "--output-format", "json"]
+        if loop.get("allowed_tools"):
+            argv += ["--allowedTools", *loop["allowed_tools"]]
         # COUNCIL_LOOP_RUN arms guard.py's strict rules; the BG_WAIT ceiling matches the old drivers.
         env = dict(os.environ, COUNCIL_LOOP_RUN="1", CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="0")
         timeout = min(loop["session_timeout_minutes"] * 60, self._left())
@@ -885,7 +972,8 @@ class Runner:
         data = _parse_session_json(out)
         result = data.get("result") if isinstance(data.get("result"), str) else ""
         timed_out = code is None
-        failed = not timed_out and (code != 0 or data.get("is_error") is True or not data)
+        # A timeout also backs off before the relaunch.
+        failed = timed_out or code != 0 or data.get("is_error") is True or not data
         text = "\n".join((result, out[-4000:], err[-4000:]))
         outcome = "timeout" if timed_out else (classify_failure(text) if failed else "ok")
         write_session_log(self.logs_dir, f"{self.run_id}-{tid}-s{self.sessions:03d}",
@@ -896,8 +984,10 @@ class Runner:
                  model="+".join(sorted({m for m in models.values() if isinstance(m, str)})),
                  duration_s=round(duration, 2), cost_usd=data.get("total_cost_usd"),
                  tokens=_tokens(data.get("usage")), num_turns=data.get("num_turns"),
-                 is_error=data.get("is_error"), exit_code=code, result_tail=result[-300:], session=self.sessions)
-        return failed, text
+                 is_error=data.get("is_error"), exit_code=code, result_tail=result[-300:], session=self.sessions,
+                 permission_denials=(len(data.get("permission_denials") or [])
+                                     if "permission_denials" in data else None))
+        return failed, text, result
 
     # ---------- end of run (best-effort, never changes the exit code) ----------
 

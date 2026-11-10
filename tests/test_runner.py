@@ -290,7 +290,7 @@ class RunnerTests(unittest.TestCase):
         res = self.runner().run()
         self.assertEqual(res["exit_code"], 2)
         self.assertIn("loop init", res["stop_reason"])
-        self.assertEqual(lr.ensure_excludes(self.repo)[:1], ["tasks/"])
+        self.assertEqual(lr.ensure_excludes(self.repo)[:1], ["/tasks/"])  # anchored (review item 4)
         self.assertEqual(lr.ensure_excludes(self.repo), [])  # idempotent
 
     def test_orphan_cycle_lock_removed(self):
@@ -381,6 +381,175 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual((self.task()["status"], self.task()["attempts"]), ("failed", 3))
         self.assertEqual(res["exit_code"], 1)
         self.assertIn("Previous attempt failed", (self.repo / ".council" / "state" / "goal.md").read_text())
+
+
+class ReviewFixTests(unittest.TestCase):
+    """Fable's T6 review findings, one test (or more) each. Borrows RunnerTests' fixture."""
+
+    setUp, tearDown = RunnerTests.setUp, RunnerTests.tearDown
+    scenario, calls, runner, task = RunnerTests.scenario, RunnerTests.calls, RunnerTests.runner, RunnerTests.task
+
+    def set_loop(self, **kw):
+        path = self.repo / ".council" / "config.json"
+        cfg = json.loads(path.read_text())
+        cfg["loop"].update(kw)
+        path.write_text(json.dumps(cfg))
+
+    def rows(self):
+        return [json.loads(x) for x in (self.repo / "logs" / "loop.jsonl").read_text().splitlines()]
+
+    # 1. a task with no work never ends done; unknown stop reasons block
+    def test_ceiling_without_commits_is_not_done(self):
+        self.store.add("Add a", verify=[PASS])
+        self.scenario({"stop": "max_minutes reached"})
+        self.runner().run()
+        t = self.task()
+        self.assertEqual(t["status"], "failed")
+        self.assertIn("no commits on task branch", t["reason"])
+        self.assertEqual(git(self.repo, "rev-list", "--count", "dev"), "1")  # nothing merged
+
+    def test_other_stop_reason_blocks(self):
+        self.store.add("Add a", verify=[PASS])
+        self.scenario({"stop": "no goal set", "commit": "a.txt"})
+        self.runner().run()
+        t = self.task()
+        self.assertEqual((t["status"], t["reason"]), ("blocked", "no goal set"))
+
+    # 2. SIGTERM kills the session tree, hands the task back, frees run.lock
+    @unittest.skipUnless(os.name == "posix", "SIGTERM delivery to self is POSIX-only here")
+    def test_sigterm_kills_session_and_releases_task(self):
+        import signal
+        import threading
+        self.store.add("Hangs", verify=[PASS])
+        pid_file = self.fake_dir / "child.pid"
+        self.scenario({"child": str(pid_file), "sleep": 120})
+        timer = threading.Timer(3, os.kill, (os.getpid(), signal.SIGTERM))
+        timer.start()
+        self.addCleanup(timer.cancel)
+        before = signal.getsignal(signal.SIGTERM)
+        with self.assertRaises(SystemExit):
+            self.runner().run()
+        self.assertIs(signal.getsignal(signal.SIGTERM), before)  # old handler restored
+        pid = int(pid_file.read_text())
+        for _ in range(50):
+            if not alive(pid):
+                break
+            time.sleep(0.1)
+        self.assertFalse(alive(pid))
+        t = self.task()
+        self.assertEqual((t["status"], t["attempts"]), ("pending", 0))
+        fh = loop_tasks.try_lock(self.repo / ".council" / "state" / "run.lock")
+        self.assertIsNotNone(fh)
+        loop_tasks.unlock(fh)
+
+    # 3. overrides only lower caps
+    def test_override_cannot_raise_caps(self):
+        self.store.add("Never finishes", verify=[PASS])
+        self.scenario({})
+        res = self.runner().run(max_sessions=53)
+        self.assertEqual(res["sessions"], 50)
+        r = self.runner()
+        r.run(max_sessions=1, max_hours=99)
+        self.assertEqual(r.max_sessions, 1)
+        self.assertLessEqual(r.deadline - self.clock(), 12 * 3600)
+
+    # 4. anchored excludes
+    def test_excludes_anchored_to_root(self):
+        def ignored(p):
+            return subprocess.run(["git", "-C", str(self.repo), "check-ignore", "-q", "--no-index", p]).returncode == 0
+        self.assertTrue(ignored("tasks/tasks.json"))
+        self.assertTrue(ignored("logs/loop.jsonl"))
+        self.assertTrue(ignored("src/__pycache__/x.pyc"))
+        self.assertFalse(ignored("src/tasks/a.py"))
+        self.assertFalse(ignored("app/logs/b.py"))
+        self.assertEqual(lr.runtime_excludes({"loop": {"tasks_file": "work/list.json", "logs_dir": "out/log"}})[:2],
+                         ["/work/", "/out/log/"])
+
+    # 5. permission mode + allowed tools; bypassPermissions refused; frozen against tampering
+    def test_permission_flags_passed_and_frozen(self):
+        self.set_loop(permission_mode="acceptEdits", allowed_tools=["Bash(git:*)", "Edit"])
+        self.store.add("Add a", verify=[PASS])
+        self.scenario({**GOAL_DONE, "print": json.dumps({"result": "ok", "permission_denials": [{"t": 1}]})})
+        self.runner().run()
+        argv = json.loads((self.fake_dir / "argv.jsonl").read_text().splitlines()[0])["argv"]
+        i = argv.index("--permission-mode")
+        self.assertEqual(argv[i + 1], "acceptEdits")
+        self.assertEqual(argv[argv.index("--allowedTools") + 1:], ["Bash(git:*)", "Edit"])
+        ses = [r for r in self.rows() if r["event"] == "session"]
+        self.assertEqual(ses[0]["permission_denials"], 1)
+        self.assertIn("permission_mode", lr.CAP_KEYS)
+
+    def test_bypass_permissions_refused(self):
+        self.set_loop(permission_mode="bypassPermissions")
+        res = self.runner().run()
+        self.assertEqual(res["exit_code"], 2)
+        self.assertIn("bypassPermissions is refused", res["stop_reason"])
+
+    # 6. a limit message with exit 0 / is_error false still backs off
+    def test_limit_in_successful_json_backs_off(self):
+        self.store.add("Add a", verify=[PASS])
+        quiet = {"print": json.dumps({"is_error": False, "result": "You've hit your session limit"})}
+        self.scenario(quiet, GOAL_DONE)
+        self.runner().run()
+        self.assertEqual(self.clock.slept, [60])
+        self.assertEqual(self.task()["status"], "done")
+
+    # 7. unexpected errors: exit 1, escalated, lock freed, task handed back
+    def test_crash_exits_1_and_escalates(self):
+        self.set_loop(claude_bin=str(self.fake_dir / "missing-claude"))
+        self.store.add("Add a", verify=[PASS])
+        res = self.runner().run()
+        self.assertEqual(res["exit_code"], 1)
+        self.assertIn("runner crashed", res["stop_reason"])
+        self.assertIn("[crash]", (self.repo / "logs" / "escalations.md").read_text())
+        self.assertEqual(self.task()["status"], "pending")
+        fh = loop_tasks.try_lock(self.repo / ".council" / "state" / "run.lock")
+        self.assertIsNotNone(fh)
+        loop_tasks.unlock(fh)
+
+    # nits
+    def test_corrupt_journal_blocks_claimed_task(self):
+        self.store.add("Add a", verify=[PASS])
+        self.store.claim("dead-runner")
+        (self.repo / ".council" / "state").mkdir(parents=True, exist_ok=True)
+        (self.repo / ".council" / "state" / "run-journal.json").write_text("{not json")
+        self.scenario(GOAL_DONE)
+        self.runner().run()
+        self.assertEqual(self.task()["status"], "blocked")
+        self.assertIn("verification inputs changed", self.task()["reason"])
+        self.assertEqual(self.calls(), 0)
+
+    def test_malformed_frozen_copy_blocks(self):
+        self.store.add("Add a", verify=[PASS])
+        task = self.store.claim("dead-runner")
+        (self.repo / ".council" / "state").mkdir(parents=True, exist_ok=True)
+        (self.repo / ".council" / "state" / "run-journal.json").write_text(json.dumps(
+            {"task_id": "t001", "claimed_at": task["claimed_at"], "frozen": {"verify": []}}))
+        self.scenario(GOAL_DONE)
+        self.runner().run()
+        self.assertEqual(self.task()["status"], "blocked")
+
+    def test_dependents_of_blocked_task_escalated(self):
+        self.store.add("First", verify=[PASS])
+        self.store.add("Second", verify=[PASS], depends_on=["t001"])
+        self.scenario({"stop": "blocked: needs a key"})
+        self.runner().run()
+        self.assertEqual(self.task("t002")["status"], "blocked")
+        self.assertIn("[blocked] task t002", (self.repo / "logs" / "escalations.md").read_text())
+
+    def test_timed_out_session_backs_off_before_relaunch(self):
+        self.store.add("Add a", verify=[PASS])
+        self.scenario(GOAL_DONE)
+        real = lr._spawn
+        calls = []
+
+        def first_times_out(*a, **kw):
+            calls.append(1)
+            return (None, "", "") if len(calls) == 1 else real(*a, **kw)
+        with mock.patch.object(lr, "_spawn", first_times_out):
+            self.runner().run()
+        self.assertEqual(self.clock.slept, [60])
+        self.assertEqual(self.task()["status"], "done")
 
 
 if __name__ == "__main__":

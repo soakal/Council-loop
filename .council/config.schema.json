@@ -102,6 +102,8 @@
         "log_backups": { "type": "integer", "minimum": 1 },
         "session_logs_keep": { "type": "integer", "minimum": 1 },
         "claude_bin": { "type": "string", "minLength": 1 },
+        "permission_mode": { "enum": ["acceptEdits", "auto", "dontAsk", "manual", "plan"], "description": "Passed to each loop session as --permission-mode. bypassPermissions is refused." },
+        "allowed_tools": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Extra --allowedTools entries for loop sessions (empty = no flag)." },
         "protected_paths": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
