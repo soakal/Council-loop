@@ -154,6 +154,7 @@ def _status(project: Path) -> dict:
                for t in tasks for n in t.get("notes") or []
                if isinstance(n, dict) and str(n.get("text", "")).startswith("stash ")]
     logs_dir = project / loop["logs_dir"]
+    records = loop_log.tail(logs_dir, n=1_000_000)
     esc = logs_dir / "escalations.md"
     esc_lines = esc.read_text(encoding="utf-8", errors="replace").splitlines()[-5:] if esc.exists() else []
     return {
@@ -164,7 +165,8 @@ def _status(project: Path) -> dict:
         "problems": [{"id": t["id"], "status": t["status"], "attempts": t.get("attempts"), "reason": t.get("reason")}
                      for t in tasks if t["status"] in ("blocked", "failed")],
         "stashes": stashes,
-        "usage": _usage(loop_log.tail(logs_dir, n=1_000_000), datetime.now(timezone.utc)),
+        "usage": _usage(records, datetime.now(timezone.utc)),
+        "postmortem": next((r for r in reversed(records) if r.get("event") == "postmortem"), None),
         "escalations": [ln for ln in esc_lines if ln.strip()],
         # The runner appends an [undelivered] line right after an escalation NEXUS did not get.
         "escalation_undelivered": any("[undelivered]" in ln for ln in esc_lines[-1:]),
@@ -186,6 +188,11 @@ def cmd_status(args) -> int:
         print(f"stash on {s['task_id']} at {s['at']}: {s['text']}  (inspect with git stash list)")
     for label, u in (("last run", st["usage"]["last_run"]), ("last 24 h", st["usage"]["last_24h"])):
         print(f"usage {label}: {u['sessions']} session(s), ${u['cost_usd']:.2f}, {u['tokens']} tokens")
+    pm = st["postmortem"]
+    if pm and any(f"HTTP Error {c}" in str(pm.get("reason") or "") for c in (401, 403)):  # urllib HTTPError text
+        print("WARNING: NEXUS rejected the API key (last post-mortem: HTTP 401/403)")
+    elif pm:
+        print("last post-mortem: " + "".join(c if c.isprintable() else " " for c in f"{pm.get('outcome')} {pm.get('reason') or ''}"))  # strip terminal escapes from log text
     if st["escalation_undelivered"]:
         print("WARNING: the last escalation could not be delivered to NEXUS (see logs/escalations.md)")
     if st["escalations"]:
