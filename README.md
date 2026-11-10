@@ -209,11 +209,54 @@ Default `protected_paths`: `tests/**`, `**/test_*`, `**/*_test.*`, `**/*.spec.*`
 - `permission_mode` can never be `bypassPermissions`.
 - Runtime files (tasks, logs, `.council/state`, config) are git-excluded, not committed.
 
+### Headless edits: `acceptEdits` + an allowlist (opt-in)
+
+The default `loop.permission_mode` stays `auto`. In headless `claude -p` runs its classifier sometimes
+returns "no verdict" on a council role's Write/Edit, which blocks the task. The fix that looks right is per
+project: `acceptEdits` (file edits inside the project are allowed) plus an explicit list of shell
+commands. Reviewed by Fable and Codex (`reviews/permission-mode-*`). On 2026-11-10 it passed three
+attended runs with no edit blocks. Only one of them (a README edit in a clone of this repo) repeated
+the kind of edit that failed overnight, and that failure was intermittent, so this is encouraging,
+not proven. Example for a Python project with a venv (replace both paths):
+
+```json
+"test_commands": ["/path/to/venv/bin/python -m pytest -q"],
+"loop": {
+  "permission_mode": "acceptEdits",
+  "allowed_tools": [
+    "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)", "Bash(git show*)",
+    "Bash(git rev-parse*)", "Bash(git ls-files*)", "Bash(git branch --show-current*)",
+    "Bash(git add*)", "Bash(git commit*)", "Bash(git restore*)",
+    "Bash(git -C * status*)", "Bash(git -C * diff*)", "Bash(git -C * log*)", "Bash(git -C * show*)",
+    "Bash(git -C * rev-parse*)", "Bash(git -C * ls-files*)", "Bash(git -C * branch --show-current*)",
+    "Bash(git -C * add*)", "Bash(git -C * commit*)", "Bash(git -C * restore*)",
+    "Bash(python3 /path/to/Council-loop/scripts/council_state.py *)",
+    "Bash(python3 /path/to/Council-loop/scripts/discover_tests.py *)",
+    "Bash(date -u +%s)", "Bash(ls*)", "Bash(cat*)", "Bash(head*)", "Bash(tail*)", "Bash(wc*)", "Bash(grep*)",
+    "Bash(/path/to/venv/bin/python -m pytest*)",
+    "Bash(/path/to/venv/bin/python -m bandit*)",
+    "Bash(/path/to/venv/bin/python -m pip_audit*)"
+  ]
+}
+```
+
+- The helper paths must be the Council-loop checkout whose `loop` you run (it is passed as `--plugin-dir`).
+- Leave out `pip`, `find`, `rm` and bare `python`: they allow installs, deletes or any code (`python -c`).
+  Tests still run project code, so this narrows the risk; it does not remove it.
+- A command not on the list is refused, not hung: in the trial the Engineer's `cat >> README.md <<EOF`
+  was refused and it switched to the Edit tool. That holds unless the mode or other settings already allow it
+  (`acceptEdits` may allow simple file commands such as `rm` inside the project).
+- Known gap: if a failed cycle created a new file and its deletion is refused, the cleanup is
+  incomplete; the next cycle sees a dirty tree and the task blocks. Safe, but not an automatic rollback.
+  Not yet seen in a run.
+- Use it for runs you can check on. For overnight runs, use a container or a separate OS user first
+  (see `LATER.md`): the session still runs as you, with your credentials.
+
 ### Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|
-| Task blocks with permission denials | In headless `claude -p` runs the default `auto` mode's classifier sometimes returns "no verdict" on a subagent Write/Edit, and that blocks the task. The task blocks cleanly and escalates; nothing is lost. `loop logs` shows `permission_denials` on the session. There is no confirmed fix yet. Observed so far: with the edit tools pre-allowed in `loop.allowed_tools` (for example `["Edit", "Write"]`, an untested example), edits to existing files sometimes went through, but other edits (README.md) were still blocked. Another untested option is `loop.permission_mode` `acceptEdits` plus an explicit Bash allowlist in `loop.allowed_tools`. Which to try is the owner's decision; `bypassPermissions` is refused. After changing the setting, run `loop resume --unblock ID`. |
+| Task blocks with permission denials | In headless `claude -p` runs the default `auto` classifier sometimes returns "no verdict" on a council role's Write/Edit. The task blocks cleanly and escalates; nothing is lost. Fix: the opt-in "Headless edits" setting above. If a needed command is refused, `loop logs --task ID` / the session log names it; add it if safe, then `loop resume --unblock ID`. `bypassPermissions` is refused. |
 | `no python3 / python / py on PATH` | The guard hook needs a Python launcher. Install Python 3.9+; on Windows install the `py` launcher. |
 | `a manual /council-cycle appears to be running (cycle.lock ...)` | A `cycle.lock` under 60 minutes old with no claimed task looks like a live manual `/council-cycle`. Wait for it, or delete `.council/state/cycle.lock` if you know it is dead. A lock left by a crashed `loop run` is cleaned up automatically. |
 | `another loop run is active` | Only one `loop run` per project (`run.lock`). Check `loop status`. |

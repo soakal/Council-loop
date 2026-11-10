@@ -1,0 +1,4 @@
+codex
+OK. The docs limit the evidence to three attended runs, require isolation before overnight use, explicitly mark new-file cleanup as untested in LATER.md, disclose scanner skips, and explain that the allowlist is not an exclusive boundary because the mode or other settings may permit additional commands.
+
+[exited with code 0]

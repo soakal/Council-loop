@@ -1,0 +1,93 @@
+diff --git a/LATER.md b/LATER.md
+index ade6830..7165807 100644
+--- a/LATER.md
++++ b/LATER.md
+@@ -21,5 +21,5 @@ One line per item. Nothing here gets built without a new approved plan.
+ - Direct `python -c`/script edits to other tasks' entries in tasks.json remain tripwire-only (§9).
+ - Gate: a frozen check that calls an unprotected script (e.g. `npm test` -> `scripts/run-tests.sh`, a Makefile target) can still be emptied by the model (tripwire limit; T8b protects only runner config + package.json `scripts` / pyproject `tool.pytest`).
+ - Notify: retry undelivered escalations (resend pass at run start/end; keep one page per task/event).
+-- Headless permission: in `claude -p` loop runs the default `auto` mode classifier often returned "no verdict" on subagent Write/Edit (t09, t11, t12), blocking tasks cleanly; pre-allowing edit tools helped only partly. Owner decision pending: keep `auto`, or `acceptEdits` + explicit Bash allowlist in `loop.allowed_tools`.
++- Headless permission: decided 2026-11-10 (owner trial, Fable + Codex approved): keep `auto` default; `acceptEdits` + allowlist is the documented per-project opt-in (README). Still open: overnight/unattended runs need a container or separate OS user first; deferred-cycle cleanup of a new file under the allowlist untested; Security scanners: bandit ran once in the trial (how it was invoked was not recorded); pip-audit has never run under this setup, so its allow rule is untested (the Security role calls bare `pip-audit`, not `python -m pip_audit`).
+ - Live NEXUS page not yet tested end to end (notify off overnight); also the guard hook under Claude Code on Windows (Tiny11 has no Claude Code).
+diff --git a/README.md b/README.md
+index 310b83f..c2e33a8 100644
+--- a/README.md
++++ b/README.md
+@@ -209,11 +209,54 @@ Default `protected_paths`: `tests/**`, `**/test_*`, `**/*_test.*`, `**/*.spec.*`
+ - `permission_mode` can never be `bypassPermissions`.
+ - Runtime files (tasks, logs, `.council/state`, config) are git-excluded, not committed.
+ 
++### Headless edits: `acceptEdits` + an allowlist (opt-in)
++
++The default `loop.permission_mode` stays `auto`. In headless `claude -p` runs its classifier sometimes
++returns "no verdict" on a council role's Write/Edit, which blocks the task. The fix that looks right is per
++project: `acceptEdits` (file edits inside the project are allowed) plus an explicit list of shell
++commands. Reviewed by Fable and Codex (`reviews/permission-mode-*`). On 2026-11-10 it passed three
++attended runs with no edit blocks. Only one of them (a README edit in a clone of this repo) repeated
++the kind of edit that failed overnight, and that failure was intermittent, so this is encouraging,
++not proven. Example for a Python project with a venv (replace both paths):
++
++```json
++"test_commands": ["/path/to/venv/bin/python -m pytest -q"],
++"loop": {
++  "permission_mode": "acceptEdits",
++  "allowed_tools": [
++    "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)", "Bash(git show*)",
++    "Bash(git rev-parse*)", "Bash(git ls-files*)", "Bash(git branch --show-current*)",
++    "Bash(git add*)", "Bash(git commit*)", "Bash(git restore*)",
++    "Bash(git -C * status*)", "Bash(git -C * diff*)", "Bash(git -C * log*)", "Bash(git -C * show*)",
++    "Bash(git -C * rev-parse*)", "Bash(git -C * ls-files*)", "Bash(git -C * branch --show-current*)",
++    "Bash(git -C * add*)", "Bash(git -C * commit*)", "Bash(git -C * restore*)",
++    "Bash(python3 /path/to/Council-loop/scripts/council_state.py *)",
++    "Bash(python3 /path/to/Council-loop/scripts/discover_tests.py *)",
++    "Bash(date -u +%s)", "Bash(ls*)", "Bash(cat*)", "Bash(head*)", "Bash(tail*)", "Bash(wc*)", "Bash(grep*)",
++    "Bash(/path/to/venv/bin/python -m pytest*)",
++    "Bash(/path/to/venv/bin/python -m bandit*)",
++    "Bash(/path/to/venv/bin/python -m pip_audit*)"
++  ]
++}
++```
++
++- The helper paths must be the Council-loop checkout whose `loop` you run (it is passed as `--plugin-dir`).
++- Leave out `pip`, `find`, `rm` and bare `python`: they allow installs, deletes or any code (`python -c`).
++  Tests still run project code, so this narrows the risk; it does not remove it.
++- A command not on the list is refused, not hung: in the trial the Engineer's `cat >> README.md <<EOF`
++  was refused and it switched to the Edit tool. That holds unless the mode or other settings already allow it
++  (`acceptEdits` may allow simple file commands such as `rm` inside the project).
++- Known gap: if a failed cycle created a new file and its deletion is refused, the cleanup is
++  incomplete; the next cycle sees a dirty tree and the task blocks. Safe, but not an automatic rollback.
++  Not yet seen in a run.
++- Use it for runs you can check on. For overnight runs, use a container or a separate OS user first
++  (see `LATER.md`): the session still runs as you, with your credentials.
++
+ ### Troubleshooting
+ 
+ | Symptom | Cause and fix |
+ |---|---|
+-| Task blocks with permission denials | In headless `claude -p` runs the default `auto` mode's classifier sometimes returns "no verdict" on a subagent Write/Edit, and that blocks the task. The task blocks cleanly and escalates; nothing is lost. `loop logs` shows `permission_denials` on the session. There is no confirmed fix yet. Observed so far: with the edit tools pre-allowed in `loop.allowed_tools` (for example `["Edit", "Write"]`, an untested example), edits to existing files sometimes went through, but other edits (README.md) were still blocked. Another untested option is `loop.permission_mode` `acceptEdits` plus an explicit Bash allowlist in `loop.allowed_tools`. Which to try is the owner's decision; `bypassPermissions` is refused. After changing the setting, run `loop resume --unblock ID`. |
++| Task blocks with permission denials | In headless `claude -p` runs the default `auto` classifier sometimes returns "no verdict" on a council role's Write/Edit. The task blocks cleanly and escalates; nothing is lost. Fix: the opt-in "Headless edits" setting above. If a needed command is refused, `loop logs --task ID` / the session log names it; add it if safe, then `loop resume --unblock ID`. `bypassPermissions` is refused. |
+ | `no python3 / python / py on PATH` | The guard hook needs a Python launcher. Install Python 3.9+; on Windows install the `py` launcher. |
+ | `a manual /council-cycle appears to be running (cycle.lock ...)` | A `cycle.lock` under 60 minutes old with no claimed task looks like a live manual `/council-cycle`. Wait for it, or delete `.council/state/cycle.lock` if you know it is dead. A lock left by a crashed `loop run` is cleaned up automatically. |
+ | `another loop run is active` | Only one `loop run` per project (`run.lock`). Check `loop status`. |
+diff --git a/REPORT.md b/REPORT.md
+index 3c52f76..1efe09a 100644
+--- a/REPORT.md
++++ b/REPORT.md
+@@ -73,7 +73,7 @@ What this proves: the gate, the test-change hold, blocking, recovery and merging
+ 
+ ## Known limitations
+ 
+-1. **Headless permission mode.** With `permission_mode: auto`, the check returned "no verdict" on subagent Write/Edit five times (t09 ×2, t11 ×2, t12 ×1). Tasks block cleanly and escalate, but the work does not get done. Pre-allowing edit tools helped only partly. The orchestrator tried `acceptEdits` plus a Bash allowlist and its own safety check refused that as self-modification, so it is untested.
++1. **Headless permission mode.** With `permission_mode: auto`, the check returned "no verdict" on subagent Write/Edit five times (t09 ×2, t11 ×2, t12 ×1). Tasks block cleanly and escalate, but the work does not get done. Pre-allowing edit tools helped only partly. The orchestrator tried `acceptEdits` plus a Bash allowlist and its own safety check refused that as self-modification, so it was untested overnight. **Update 2026-11-10:** with the owner present, `acceptEdits` + a reviewed allowlist (Fable + Codex approved, `reviews/permission-mode-*`) passed three runs with no edit blocks: Shantry Bills `/robots.txt` and "Due this month", and a README edit in a disposable Council-loop clone. Only that last one repeated the t12 case, and the overnight failure was intermittent, so this is encouraging, not proven. $3.80, `main` and remote refs unchanged. Documented in README as a per-project opt-in; `auto` stays the default. Unattended overnight use still needs a container or separate OS user first.
+ 2. **NEXUS page never sent live.** Tested against a fake server only (no 3 am page on purpose). Undelivered pages are not retried.
+ 3. **Guard hook is advisory.** It is a pattern filter; a creative model can get around it. It was never exercised under Claude Code on Windows (the VM has no Claude Code).
+ 4. **Same OS user, no sandbox.** A model can still game a check that calls an unprotected script, commit straight to the base branch, or edit `tasks.json` with a script. These are tripwires, not walls (listed in `LATER.md`).
+@@ -86,7 +86,7 @@ What this proves: the gate, the test-change hold, blocking, recovery and merging
+ 
+ 1. **Turn on branch protection for `main`** on GitHub (require a PR, block force pushes).
+ 2. **Enable and test the NEXUS page.** In `.council/config.local.json` set `loop.notify.enabled: true` and `loop.notify.nexus_url` (or export `NEXUS_BASE_URL`), then block one throwaway task and confirm your phone gets it. `loop status` shows a warning if the send failed.
+-3. **Decide the permission mode.** Keep `auto` (safe, but expect blocked tasks), or set `loop.permission_mode: "acceptEdits"` with an explicit Bash list in `loop.allowed_tools`. This is the one decision that controls whether the loop is useful unattended. Try the second option on one small task first.
++3. ~~Decide the permission mode.~~ Done 2026-11-10: per-project `acceptEdits` + allowlist (README "Headless edits"), `auto` stays the default. Before overnight runs: a container or separate OS user (LATER.md).
+ 4. **Tiny11 snapshot** `pre-councilloop-test-20261110`: test files are already removed from the VM. Delete the snapshot, or roll back to it if you want the VM exactly as before.
+ 5. **Review and merge the PR** for `revamp/console-loop`.
+ 

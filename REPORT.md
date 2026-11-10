@@ -73,7 +73,7 @@ What this proves: the gate, the test-change hold, blocking, recovery and merging
 
 ## Known limitations
 
-1. **Headless permission mode.** With `permission_mode: auto`, the check returned "no verdict" on subagent Write/Edit five times (t09 ×2, t11 ×2, t12 ×1). Tasks block cleanly and escalate, but the work does not get done. Pre-allowing edit tools helped only partly. The orchestrator tried `acceptEdits` plus a Bash allowlist and its own safety check refused that as self-modification, so it is untested.
+1. **Headless permission mode.** With `permission_mode: auto`, the check returned "no verdict" on subagent Write/Edit five times (t09 ×2, t11 ×2, t12 ×1). Tasks block cleanly and escalate, but the work does not get done. Pre-allowing edit tools helped only partly. The orchestrator tried `acceptEdits` plus a Bash allowlist and its own safety check refused that as self-modification, so it was untested overnight. **Update 2026-11-10:** with the owner present, `acceptEdits` + a reviewed allowlist (Fable + Codex approved, `reviews/permission-mode-*`) passed three runs with no edit blocks: Shantry Bills `/robots.txt` and "Due this month", and a README edit in a disposable Council-loop clone. Only that last one repeated the t12 case, and the overnight failure was intermittent, so this is encouraging, not proven. $3.80, `main` and remote refs unchanged. Documented in README as a per-project opt-in; `auto` stays the default. Unattended overnight use still needs a container or separate OS user first.
 2. **NEXUS page never sent live.** Tested against a fake server only (no 3 am page on purpose). Undelivered pages are not retried.
 3. **Guard hook is advisory.** It is a pattern filter; a creative model can get around it. It was never exercised under Claude Code on Windows (the VM has no Claude Code).
 4. **Same OS user, no sandbox.** A model can still game a check that calls an unprotected script, commit straight to the base branch, or edit `tasks.json` with a script. These are tripwires, not walls (listed in `LATER.md`).
@@ -86,7 +86,7 @@ What this proves: the gate, the test-change hold, blocking, recovery and merging
 
 1. **Turn on branch protection for `main`** on GitHub (require a PR, block force pushes).
 2. **Enable and test the NEXUS page.** In `.council/config.local.json` set `loop.notify.enabled: true` and `loop.notify.nexus_url` (or export `NEXUS_BASE_URL`), then block one throwaway task and confirm your phone gets it. `loop status` shows a warning if the send failed.
-3. **Decide the permission mode.** Keep `auto` (safe, but expect blocked tasks), or set `loop.permission_mode: "acceptEdits"` with an explicit Bash list in `loop.allowed_tools`. This is the one decision that controls whether the loop is useful unattended. Try the second option on one small task first.
+3. ~~Decide the permission mode.~~ Done 2026-11-10: per-project `acceptEdits` + allowlist (README "Headless edits"), `auto` stays the default. Before overnight runs: a container or separate OS user (LATER.md).
 4. **Tiny11 snapshot** `pre-councilloop-test-20261110`: test files are already removed from the VM. Delete the snapshot, or roll back to it if you want the VM exactly as before.
 5. **Review and merge the PR** for `revamp/console-loop`.
 
