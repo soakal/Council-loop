@@ -58,8 +58,7 @@ that it is done; the runner's checks do.
 
 Run `./loop ...` (Linux/macOS) or `loop.cmd ...` (Windows) from a clone of this repo, or
 call `python3 scripts/loop.py ...` directly. Use `--project DIR` to point at a project other
-than the current directory. Every command has `--help`. The test suite is verified on
-Windows 11 (166 tests OK, see `reviews/windows-tiny11.txt`).
+than the current directory. Every command has `--help`. The test suite is verified on Windows 11 (Tiny11) at commit WINDOWS_SHA (see `reviews/windows-tiny11.txt`).
 
 ### 5-minute quickstart
 
@@ -86,8 +85,7 @@ git switch -c work                       # the loop refuses main/master
 | `loop logs` | Print `logs/loop.jsonl`, one line per event. Flags: `-n N` (default 50), `--task ID`, `--follow`. |
 | `loop note ID TEXT` | Add an owner note to a task. |
 
-**Exit codes of `loop run`:** `0` all tasks done; `1` a cap was hit, a task failed or work is
-left over (or the runner crashed); `2` refused to start (bad config, no `loop init`, another
+**Exit codes of `loop run`:** `0` no task is pending or failed (blocked tasks do not change the exit code: each one was escalated, see `loop status`); `1` a cap was hit, a task failed or pending work is left over (or the runner crashed); `2` refused to start (bad config, no `loop init`, another
 run active, a manual `/council-cycle` in progress, runtime paths not git-excluded).
 A loop session cannot change loop state itself: with `COUNCIL_LOOP_RUN=1` only `status` and
 `logs` work.
@@ -215,7 +213,7 @@ Default `protected_paths`: `tests/**`, `**/test_*`, `**/*_test.*`, `**/*.spec.*`
 
 | Symptom | Cause and fix |
 |---|---|
-| Task blocks with permission denials | In headless `claude -p` runs the default `auto` mode's classifier sometimes returns "no verdict" on a subagent Write/Edit, and that blocks the task. The task blocks cleanly and escalates; nothing is lost. `loop logs` shows `permission_denials` on the session. How to fix it is the owner's decision: pre-allow the edit tools with `loop.allowed_tools` (for example `["Edit", "Write", "MultiEdit"]`), or set `loop.permission_mode` to `acceptEdits` together with an explicit Bash allowlist in `loop.allowed_tools`. `bypassPermissions` is refused. Then `loop resume --unblock ID`. |
+| Task blocks with permission denials | In headless `claude -p` runs the default `auto` mode's classifier sometimes returns "no verdict" on a subagent Write/Edit, and that blocks the task. The task blocks cleanly and escalates; nothing is lost. `loop logs` shows `permission_denials` on the session. There is no confirmed fix yet. Observed so far: with the edit tools pre-allowed in `loop.allowed_tools` (for example `["Edit", "Write"]`, an untested example), edits to existing files sometimes went through, but other edits (README.md) were still blocked. Another untested option is `loop.permission_mode` `acceptEdits` plus an explicit Bash allowlist in `loop.allowed_tools`. Which to try is the owner's decision; `bypassPermissions` is refused. After changing the setting, Then `loop resume --unblock ID`. |
 | `no python3 / python / py on PATH` | The guard hook needs a Python launcher. Install Python 3.9+; on Windows install the `py` launcher. |
 | `a manual /council-cycle appears to be running (cycle.lock ...)` | A `cycle.lock` under 60 minutes old with no claimed task looks like a live manual `/council-cycle`. Wait for it, or delete `.council/state/cycle.lock` if you know it is dead. A lock left by a crashed `loop run` is cleaned up automatically. |
 | `another loop run is active` | Only one `loop run` per project (`run.lock`). Check `loop status`. |

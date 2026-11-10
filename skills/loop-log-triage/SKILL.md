@@ -28,7 +28,7 @@ Common reasons and exit codes:
 
 | Event / reason | Meaning |
 |---|---|
-| `run end`, reason `no runnable task left`, exit 0 | All tasks done. |
+| `run end`, reason `no runnable task left`, exit 0 | Nothing left to run: tasks are done or blocked (check `loop status`). |
 | `cap stop`, `max_sessions reached` / `max_hours reached`, exit 1 | A configured cap. Raise it (or rerun) if work remains. |
 | `task ... blocked` (reason inside) | Needs the owner: `loop resume --unblock ID`, or `--approve-tests ID --reason ...` for a protected test change. Reason "verification inputs changed" means tasks/config were edited mid-task. |
 | `task ... failed` | Hit `loop.max_attempts`; `loop resume --retry-failed`. |

@@ -165,7 +165,7 @@ logs note` (`--project DIR`, default cwd). Python 3.9+, stdlib only, Linux and W
 - **Flow per task:** claim -> `task/...` branch -> freeze verify inputs and caps -> `set-goal` ->
   `claude -p /council-loop:council-cycle --plugin-dir ... --permission-mode <loop.permission_mode>`
   sessions (env `COUNCIL_LOOP_RUN=1`) until `stop.flag` -> the runner runs the checks, enforces
-  `loop.protected_paths`, and merges. Exit codes: 0 all done, 1 cap/failures/crash, 2 refused.
+  `loop.protected_paths`, and merges. Exit codes: 0 nothing pending/failed (blocked tasks are escalated, still 0), 1 cap/failures/crash, 2 refused.
 - **`stop.flag` handling:** cleared before each session, read after. `goal complete` and the
   `max_cycles`/`max_minutes reached` flags go to the verify gate; anything else (`blocked: ...`)
   blocks the task. Failed sessions back off (`loop.backoff`, or a parsed reset time).
@@ -180,7 +180,7 @@ logs note` (`--project DIR`, default cwd). Python 3.9+, stdlib only, Linux and W
 - **Escalation:** `scripts/loop_notify.py` posts a NEXUS flag (`/api/safety/flags`) when
   `loop.notify.enabled` is true (default false); the key is fetched by name through
   `loop.secrets` (`command`/`env`/`infisical`). Failures are logged as `[undelivered]`, never fatal.
-- **Windows:** the suite passed on Windows 11 (see `reviews/windows-tiny11.txt`).
+- **Windows:** the suite passed on Windows 11 (Tiny11) at commit WINDOWS_SHA (see `reviews/windows-tiny11.txt`).
 
 ## Brain event loopback (best-effort, end of a `loop run`)
 
