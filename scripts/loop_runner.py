@@ -934,14 +934,17 @@ class Runner:
         hours = min(max_hours or loop["max_hours"], loop["max_hours"])
         self.deadline = self.clock() + float(hours) * 3600  # the ONE run deadline
         self.logs_dir = self.repo / loop["logs_dir"]
-        self.log = get_logger(self.logs_dir, loop["log_max_bytes"], loop["log_backups"])
-        self.store = TaskStore(self.repo / loop["tasks_file"])
+        self.log = None
         try:
+            self.log = get_logger(self.logs_dir, loop["log_max_bytes"], loop["log_backups"])
+            self.store = TaskStore(self.repo / loop["tasks_file"])
             refusal = self._locked_preflight()
         except Exception as exc:  # e.g. an unreadable tasks file: refuse, don't leave run.lock held
             refusal = f"startup check failed: {type(exc).__name__}: {exc}"
         if refusal:
             print(f"loop run: {refusal}", file=sys.stderr)
+            if self.log is not None:
+                self.log.close()  # Windows can't rotate/delete a loop.jsonl a finished run still holds
             unlock(lock)
             return {"exit_code": 2, "stop_reason": refusal, "sessions": 0, "counts": {}}
         run_start = self.now().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -987,8 +990,11 @@ class Runner:
                 signal.signal(signal.SIGTERM, old_term)
             if self.end_hooks:
                 self._end_of_run(run_start)
-            (self.state / "cycle.lock").unlink(missing_ok=True)  # a clean exit never leaves one behind
-            unlock(lock)
+            try:
+                (self.state / "cycle.lock").unlink(missing_ok=True)  # a clean exit never leaves one behind
+            finally:
+                self.log.close()  # release loop.jsonl: Windows can't rotate or delete a file left open
+                unlock(lock)
 
     def _attempt_guarded(self, task: dict) -> str | None:
         """One attempt; a git error blocks the task (run continues), the deadline stops the run."""

@@ -252,9 +252,11 @@ class GuardTest(unittest.TestCase):
         self.repo_on("main")
         outside = tempfile.TemporaryDirectory()
         self.addCleanup(outside.cleanup)
-        self.assertTrue(self.bash(f"git -C {self.dir} push", cwd=outside.name))
+        # Quoted: bash (Git Bash on Windows) strips the backslashes of an unquoted C:\... path.
+        self.assertTrue(self.bash(f'git -C "{self.dir}" push', cwd=outside.name))
         git(self.dir, "checkout", "-q", "-b", "feature")
-        self.assertFalse(self.bash(f"git -C {self.dir} push", cwd=outside.name))
+        self.assertFalse(self.bash(f'git -C "{self.dir}" push', cwd=outside.name))
+        self.assertTrue(self.bash(f"git -C {self.dir}/nope push", cwd=outside.name))  # unresolvable: fail closed
 
     def test_any_internal_error_fails_closed(self):
         spec = importlib.util.spec_from_file_location("guard_under_test", GUARD)
