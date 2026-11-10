@@ -19,3 +19,12 @@ Thumbs.db
 # Generated Python bytecode
 __pycache__/
 *.pyc
+
+# Loop runtime (the loop's own task list and logs; usage.md is tracked on purpose)
+tasks/*
+!tasks/.gitkeep
+logs/*
+!logs/usage.md
+
+# Agent worktrees created by Claude Code subagents
+.claude/worktrees/

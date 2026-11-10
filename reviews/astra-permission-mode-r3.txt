@@ -1,0 +1,8 @@
+codex
+APPROVE — for an attended, branch-only trial with no pushes; not for unattended use.
+
+Round 3 addresses the round-2 objections. `PLUGIN_ROOT` at `scripts/loop_runner.py:603`, passed through `--plugin-dir`, supports the original-checkout helper paths even when the target is the disposable clone. The clock addition, conditional cleanup behavior, verification hints, and remote checks align with `council-cycle.md`.
+
+Treat the Round 3 corrections as superseding the earlier contradictory wording. If neither trial exercises deferred cleanup of a newly created file, report that behavior as **untested**. Scanner skips must likewise remain visible in the recorded Security `TOOLS:` results.
+
+[exited with code 0]

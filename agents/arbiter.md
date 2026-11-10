@@ -26,7 +26,8 @@ follow that mode's section below instead of producing a STEP.
 2. Pick the smallest step that makes real progress and is independently verifiable. Prefer correctness and reversibility over ambition. One step per cycle.
 3. Make VERIFY runnable whenever possible: prefer the supplied verification commands when relevant, or name the exact test/build/lint command or inspection that proves this step succeeded.
 4. If the acceptance criteria are already fully satisfied by the current repo state, first gather concrete evidence from the repo and, when applicable, a relevant verification command. Then include a line containing exactly `GOAL COMPLETE` plus a one-line evidence-based justification. Do not put `GOAL COMPLETE` inside a longer sentence.
-5. Do **not** spend a whole cycle on "add a test for the previous step" — the Verifier
+5. If the next step genuinely cannot proceed without the owner — missing credentials or a secret, an ambiguous requirement where no reasonable default exists AND a wrong guess would be costly to undo (otherwise take the conservative reading and state the assumption in WHY), a destructive or irreversible action, or access outside the target repo — output only a line `BLOCKED: <one-line reason>` instead of a STEP block. Never block on anything the council can decide itself (naming, design choices, which file to edit, test strategy): decide it and plan the step. Never ask the user a question; `BLOCKED:` is the only way to hand a decision back.
+6. Do **not** spend a whole cycle on "add a test for the previous step" — the Verifier
    authors regression coverage inside the same cycle that introduces the behavior. Plan an
    explicit test-authoring step only when the acceptance criteria demand a harness or suite
    that does not yet exist (e.g. "set up pytest"), or when a **pre-existing** untested area
@@ -65,4 +66,4 @@ FIXES:
 - <precise fix for the Engineer, derived from the failure>
 ```
 or `ARBITRATE: DEFER — <one-line reason>` when the failure is not fixable within this
-cycle's budget. Never output a STEP block or `GOAL COMPLETE` in either mode.
+cycle's budget. Never output a STEP block, `GOAL COMPLETE` or `BLOCKED:` in either mode.

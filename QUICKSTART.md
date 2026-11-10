@@ -32,6 +32,26 @@ itself) — `/council-doctor` checks for all three.
 
 That's the whole thing. The rest of this page just explains each part.
 
+### Prefer to hand it a to-do list and walk away? Use the loop runner
+
+Give it tasks, each with a command that proves the task is done. It does them one by one on
+its own branches and only merges a task after *its own* check passes. From a clone of this
+repo (Windows: use `loop.cmd`; needs Python 3.9+ and the `py` launcher):
+
+```
+cd your-project
+git switch -c work                  # the loop never works on main/master
+/path/to/Council-loop/loop init
+/path/to/Council-loop/loop add "Add a --version flag" --accept "prints the version" --verify "python3 -m unittest discover -s tests"
+/path/to/Council-loop/loop run
+/path/to/Council-loop/loop status
+```
+
+If a task gets stuck: `loop status`, fix the cause, then `loop resume --unblock <id>`
+(or `--retry-failed`, or `--approve-tests <id> --reason "..."`). Paging you through NEXUS is
+off until `loop.notify.enabled` is true. Full guide, config table and troubleshooting:
+[README.md](README.md#the-loop-runner-unattended-mode).
+
 *(Commands install namespaced as `/council-loop:<command>`. If you only have Council
 Loop's skills/plugins loaded and nothing else uses the same names, the short form —
 `/goal`, `/council-cycle` — may also work; this page uses the short form after this
@@ -159,8 +179,9 @@ from the marketplace.)*
 - **`/council-loop:goal` isn't recognized?** Confirm the plugin is installed (`/plugin`
   lists it) and enabled for this session, then reopen Claude Code in your project.
 - **`/loop` specifically isn't recognized?** It's a separate bundled Claude Code skill,
-  not part of this plugin — if your session doesn't have it, run `./run-loop.sh` (or
-  `.\run-loop.ps1` on Windows) instead of `/loop`; it does the same repeated-cycle job.
+  not part of this plugin — if your session doesn't have it, use `loop run` (see above)
+  instead of `/loop`; it does the same repeated-cycle job. (`run-loop.sh` / `run-loop.ps1`
+  still work as thin wrappers around it.)
 - **It stopped sooner than expected?** It probably hit `max_cycles` or `max_minutes`. Raise
   them in your project's `.council\config.json` and run `/loop /council-cycle` again — as
   long as there's now headroom, it clears the stop on its own and keeps going (no need to

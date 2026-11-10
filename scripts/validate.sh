@@ -28,8 +28,16 @@ required_files=(
   "$repo_root/scripts/discover_tests.py"
   "$repo_root/scripts/validate.sh"
   "$repo_root/scripts/postmortem_payload.py"
+  "$repo_root/scripts/loop.py"
+  "$repo_root/scripts/loop_tasks.py"
+  "$repo_root/scripts/loop_runner.py"
+  "$repo_root/scripts/loop_log.py"
+  "$repo_root/scripts/loop_notify.py"
+  "$repo_root/scripts/win_job.py"
+  "$repo_root/loop"
+  "$repo_root/loop.cmd"
   "$repo_root/scripts/hooks/validate_after_edit.sh"
-  "$repo_root/scripts/hooks/guard_state_and_secrets.sh"
+  "$repo_root/scripts/hooks/guard.py"
   "$repo_root/skills/docs-sync/SKILL.md"
   "$repo_root/skills/loop-log-triage/SKILL.md"
   "$repo_root/skills/council-loop-status-check/SKILL.md"
@@ -40,6 +48,7 @@ required_files=(
   "$repo_root/set-target.sh"
   "$repo_root/run-loop.ps1"
   "$repo_root/run-loop.sh"
+  "$repo_root/tests/test_e2e.py"
 )
 
 for path in "${required_files[@]}"; do
@@ -103,8 +112,7 @@ bash -n "$repo_root/set-target.sh"
 bash -n "$repo_root/start-council.sh"
 bash -n "$repo_root/run-loop.sh"
 bash -n "$repo_root/scripts/hooks/validate_after_edit.sh"
-bash -n "$repo_root/scripts/hooks/guard_state_and_secrets.sh"
-python3 -m py_compile "$repo_root/scripts/council_state.py" "$repo_root/scripts/council_doctor.py" "$repo_root/scripts/discover_tests.py" "$repo_root/scripts/postmortem_payload.py"
+python3 -m py_compile "$repo_root/scripts/council_state.py" "$repo_root/scripts/council_doctor.py" "$repo_root/scripts/discover_tests.py" "$repo_root/scripts/postmortem_payload.py" "$repo_root/scripts/hooks/guard.py"
 python3 "$repo_root/scripts/discover_tests.py" "$repo_root" >/dev/null
 
 tmp_root="$(mktemp -d)"
@@ -342,6 +350,99 @@ if [[ -z "$malformed_stderr" ]]; then
   exit 1
 fi
 
+# --- loop block: example + schema list exactly the defaults council_state.py injects ---
+python3 - "$repo_root" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+sys.path.insert(0, str(root / "scripts"))
+import council_state
+
+example = json.loads((root / ".council/config.example.json").read_text(encoding="utf-8"))
+schema = json.loads((root / ".council/config.schema.json").read_text(encoding="utf-8"))
+if example.get("loop") != council_state.DEFAULT_LOOP:
+    raise SystemExit("config.example.json loop block does not match council_state.DEFAULT_LOOP")
+schema_keys = set(schema["properties"]["loop"]["properties"])
+if schema_keys != set(council_state.DEFAULT_LOOP):
+    raise SystemExit(f"config.schema.json loop keys differ from DEFAULT_LOOP: {sorted(schema_keys ^ set(council_state.DEFAULT_LOOP))}")
+PY
+
+# --- loop block: a config with no loop block gets the defaults injected ---
+tmp_loop="$(mktemp -d)"
+trap 'rm -rf "$tmp_root" "$tmp_root2" "$tmp_loop"' EXIT
+python3 "$repo_root/scripts/council_state.py" --root "$tmp_loop" init-config >/dev/null
+python3 - "$tmp_loop/.council/config.json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+cfg = json.load(open(path, encoding="utf-8"))
+cfg.pop("loop", None)
+json.dump(cfg, open(path, "w", encoding="utf-8"))
+PY
+loop_defaults_stdout="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_loop" effective-config 2>/dev/null)"
+python3 - "$loop_defaults_stdout" "$repo_root" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(sys.argv[2]) / "scripts"))
+import council_state
+
+if json.loads(sys.argv[1]).get("loop") != council_state.DEFAULT_LOOP:
+    raise SystemExit("expected default loop block injected into a config without one")
+PY
+
+# --- loop block: a bad cap is rejected with a message naming the key ---
+printf '%s\n' '{"loop": {"max_attempts": 0}}' > "$tmp_loop/.council/config.local.json"
+set +e
+bad_cap_stderr="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_loop" effective-config 2>&1 >/dev/null)"
+bad_cap_status=$?
+set -e
+if [[ "$bad_cap_status" -eq 0 || "$bad_cap_stderr" != *"loop.max_attempts"* ]]; then
+  echo "Expected loop.max_attempts=0 to be rejected naming the key, got exit $bad_cap_status: $bad_cap_stderr" >&2
+  exit 1
+fi
+
+# --- loop-check: compatible config passes; each incompatible setting fails with a clear message ---
+rm -f "$tmp_loop/.council/config.local.json"
+python3 "$repo_root/scripts/council_state.py" --root "$tmp_loop" loop-check >/dev/null 2>&1
+for case in \
+  '{"target_repo": "/some/other/repo"}|target_repo' \
+  '{"dry_run": true}|dry_run' \
+  '{"auto_commit": false}|auto_commit' \
+  '{"loop": {"base_branch": "main"}}|loop.base_branch'; do
+  printf '%s\n' "${case%%|*}" > "$tmp_loop/.council/config.local.json"
+  set +e
+  loop_check_stderr="$(python3 "$repo_root/scripts/council_state.py" --root "$tmp_loop" loop-check 2>&1 >/dev/null)"
+  loop_check_status=$?
+  set -e
+  if [[ "$loop_check_status" -eq 0 || "$loop_check_stderr" != *"loop mode: ${case##*|}"* ]]; then
+    echo "Expected loop-check to reject ${case%%|*} naming ${case##*|}, got exit $loop_check_status: $loop_check_stderr" >&2
+    exit 1
+  fi
+done
+rm -f "$tmp_loop/.council/config.local.json"
+
+# --- set-goal: archives the prior run's history and clears stop.flag ---
+python3 "$repo_root/scripts/council_state.py" --root "$tmp_loop" set-goal --objective 'first goal' --acceptance 'a' >/dev/null
+first_started="$(sed -n 's/^started_at: //p' "$tmp_loop/.council/state/goal.md")"
+python3 "$repo_root/scripts/council_state.py" --root "$tmp_loop" append-history \
+  --cycle 1 --step 's' --verdict accept --commit null --notes 'n'
+printf '%s\n' 'halt' > "$tmp_loop/.council/state/stop.flag"
+python3 "$repo_root/scripts/council_state.py" --root "$tmp_loop" set-goal --objective 'second goal' >/dev/null
+archive_dir="$tmp_loop/.council/state/archive/${first_started//:/-}"
+if [[ ! -f "$archive_dir/history.jsonl" || -e "$tmp_loop/.council/state/history.jsonl" || -e "$tmp_loop/.council/state/stop.flag" ]]; then
+  echo "Expected set-goal to move history.jsonl into $archive_dir and remove stop.flag" >&2
+  exit 1
+fi
+if ! grep -q 'second goal' "$tmp_loop/.council/state/goal.md"; then
+  echo "Expected set-goal to write the new objective into goal.md" >&2
+  exit 1
+fi
+
 # --- run-loop.ps1 / set-target.ps1: parse-check with pwsh/powershell if available; WARNING-only skip otherwise ---
 pwsh_bin=""
 if command -v pwsh >/dev/null 2>&1; then
@@ -370,5 +471,26 @@ PS1
 else
   echo "WARNING: no pwsh/powershell available in this validate.sh context -- skipping .ps1 parse checks" >&2
 fi
+
+(cd "$repo_root" && python3 -m unittest discover -s tests)
+
+# README must document every loop subcommand and every loop.* config key (docs match code).
+python3 - "$repo_root" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/scripts")
+from pathlib import Path
+from council_state import DEFAULT_LOOP
+
+readme = (Path(sys.argv[1]) / "README.md").read_text(encoding="utf-8")
+missing = [f"loop {c}" for c in ("init", "add", "run", "status", "resume", "logs", "note")
+           if f"loop {c}" not in readme]
+missing += [f"loop.{k}" for k in DEFAULT_LOOP if f"loop.{k}" not in readme]
+for k, v in DEFAULT_LOOP.items():
+    if isinstance(v, dict):
+        missing += [f"loop.{k}.{s}" for s in v if f"loop.{k}.{s}" not in readme]
+if missing:
+    print("README.md is missing: " + ", ".join(missing), file=sys.stderr)
+    sys.exit(1)
+PY
 
 echo "Validation passed."

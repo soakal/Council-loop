@@ -80,7 +80,8 @@ role; nothing about it changes cycle behavior.
 **Autonomous run:** `/loop /council-loop:council-cycle` re-invokes the cycle until a
 `stop.flag` appears. `/loop` itself is a bundled Claude Code skill, not part of this
 plugin — if it isn't available in your session (e.g. bundled skills disabled), use the
-`run-loop.ps1`/`run-loop.sh` drivers instead, which loop the same command without it.
+loop runner (`loop run`, below) instead. For unattended multi-task runs always prefer the
+runner: it adds the verify gate, branches, caps, recovery and escalation.
 
 ## State & config
 
@@ -96,7 +97,7 @@ templates) if it doesn't already exist.
 - `.council/state/goal.md` — current objective + acceptance criteria + `started_at` (runtime, gitignored).
 - `.council/state/history.jsonl` — one line per cycle (runtime, gitignored).
 - `.council/state/transcripts/` — optional readable cycle transcripts (runtime, gitignored).
-- `.council/state/stop.flag` — presence halts `/loop`; contents = reason (runtime, gitignored).
+- `.council/state/stop.flag` — presence halts `/loop`; contents = reason (runtime, gitignored). The runner (`scripts/loop_runner.py`) gates `goal complete` and `max_cycles reached`/`max_minutes reached`; anything else, including the Arbiter's `blocked: <reason>` (needs the owner), marks the task `blocked`.
 - `.council/state/cycle.lock` — held for the duration of one cycle (`begin-cycle`/`end-cycle`); a lock older than an hour is treated as crashed-process debris and reclaimed automatically (runtime, gitignored).
 - `.council/state/archive/<started_at>/` — prior runs' `history.jsonl`/`dynamic-agents.jsonl`/`transcripts/`, moved here by `/goal` instead of being deleted (runtime, gitignored).
 
@@ -105,7 +106,7 @@ templates) if it doesn't already exist.
 `hooks/hooks.json` (this plugin's own hook manifest — plugins don't use `.claude/settings.json`
 for hooks, only for the `agent`/`subagentStatusLine` keys) wires two hooks, each a real
 script under `scripts/hooks/` rather than an inline command, so they're directly testable
-(`echo '<payload-json>' | bash scripts/hooks/<name>.sh`):
+(`echo '<payload-json>' | python3 scripts/hooks/guard.py`; tests in `tests/test_guard.py`):
 - **PostToolUse** (`validate_after_edit.sh`, matcher `Edit|Write|MultiEdit`): after a change
   to *this plugin's own* `.council/config*.json`, `agents/*.md`, or `commands/*.md` (scoped
   to `$CLAUDE_PLUGIN_ROOT`, the real env var Claude Code exports to hook processes — never
@@ -113,7 +114,8 @@ script under `scripts/hooks/` rather than an inline command, so they're directly
   config/schema/example or frontmatter drift surfaces immediately instead of at the next
   failed cycle. A real failure exits non-zero (never suppressed) so it's visible; a
   non-matching file is a silent no-op.
-- **PreToolUse** (`guard_state_and_secrets.sh`, matcher `Edit|Write|MultiEdit`): denies
+- **PreToolUse** (`guard.py`, stdlib Python, matcher `Bash|Read|Grep|Glob|Edit|Write|MultiEdit|NotebookEdit`;
+  fails closed on an unparseable payload): base rules deny
   (via `permissionDecision: deny`, never a raw non-zero exit) two things the rest of this
   file already states as policy, in **any** project this plugin is used from — a direct
   Edit/Write/MultiEdit on `.council/state/history.jsonl` (must only be written via
@@ -123,12 +125,19 @@ script under `scripts/hooks/` rather than an inline command, so they're directly
   `git ls-files` reports as tracked — a bare mention of either concept in prose is left
   alone. Writing the same into `.council/config.local.json` (gitignored) is exactly what
   that file is for.
+- **Strict deny-list** (same `guard.py`, on only with `--strict` — passed by this repo's own
+  tracked `.claude/settings.json` — or env `COUNCIL_LOOP_RUN=1`): blocks `rm -rf` variants,
+  force pushes, pushes to / commits on `main`/`master`, disk tools, credential files through
+  Bash or any file tool (matched on the resolved real path), `infisical secrets set/delete`,
+  and, with `COUNCIL_LOOP_RUN=1` only, edits to `tasks/tasks.json`, `.council/config.json`,
+  `.council/config.local.json` and `.council/state/run-journal.json`. Advisory only — see PLAN.md §3.
 
 ## Rules for the loop (important)
 
 - **`target_repo`** is where all edits and commits land. `"."` means the active project — wherever `.council/` was bootstrapped, i.e. wherever you're actually running the council from — and is the normal case; point it at another repo's absolute path only when you want to drive a *different* project's changes from here.
 - **Ceiling replaces the old cost cap:** the cycle stops at `max_cycles` OR `max_minutes`, whichever comes first — this is the subscription-model equivalent of the PowerShell dollar ceiling.
 - **Pre-run guards:** `target_repo` must be a git repository. On **every** cycle (not just the first), TARGET's working tree must be clean before the Arbiter plans — or, under `auto_commit:false`, contain only the fully-staged, not-yet-committed result of the prior cycle's ACCEPT; anything else (the user's own uncommitted work, orphaned residue from a crashed prior cycle) writes `stop.flag` rather than silently building on top of it. Either guard failing writes `stop.flag`. The commit step (§5) is a second, narrower layer of the same protection: it only ever stages the exact paths the Engineer/Security/Verifier reported that cycle — never `git add -A` — so even if something unexpected slips past the pre-run guard mid-cycle, it still can't get swept into the commit.
+- **Never ask when headless.** Under `COUNCIL_LOOP_RUN=1` or any non-interactive session the council never asks a question; the Arbiter returns `BLOCKED: <reason>` and the cycle writes `stop.flag` = `blocked: <reason>`.
 - **One step per cycle.** The Engineer must not scope-creep; the Realist defaults to `REVISE` when unsure.
 - **Coverage is the Verifier's job, not the Engineer's.** The Engineer implements the step;
   the Verifier adds the regression test in the same cycle. Don't plan separate "add a test
@@ -143,79 +152,76 @@ script under `scripts/hooks/` rather than an inline command, so they're directly
 - History lines now carry optional `security`, `verifier`, and `dynamic` fields; pre-upgrade lines without them stay valid.
 - Portability first: nothing here should hard-code a machine-specific path outside `config.json`.
 
-## Drivers operate on a target project, not on their own location
+## The loop runner (`scripts/loop.py`, `scripts/loop_runner.py`)
 
-`run-loop.ps1`/`run-loop.sh` (below) still ship alongside `scripts/` — that part of
-their own location never changes, since `scripts/council_state.py` and
-`scripts/postmortem_payload.py` are siblings the driver finds via its own script path
-(`$PSScriptRoot` / `dirname "${BASH_SOURCE[0]}"`) regardless of where it's invoked from.
-What changed for the plugin conversion: the driver's own directory and the **project
-being driven** are two independent things now, never assumed to be the same. Each
-driver takes an explicit target (`-TargetDir`/first positional arg, default: current
-directory) and `cd`s there (or runs `claude` with cwd set there) for every cycle, so
-`.council/` state, `stop.flag`, and the run's own log file all live in the target
-project — never inside wherever this plugin happens to be installed. Both drivers also
-pass `--plugin-dir <their own location>` to every `claude -p` invocation, so the loop
-works whether or not Council Loop is separately installed via a marketplace.
+`loop` (`./loop`, `loop.cmd`, or `python3 scripts/loop.py`) is the unattended driver; README.md
+("The loop runner") is the user guide and config table. Subcommands: `init add run status resume
+logs note` (`--project DIR`, default cwd). Python 3.9+, stdlib only, Linux and Windows.
 
-## Brain event loopback (best-effort, driver-only)
+- **`run-loop.sh` / `run-loop.ps1` are compatibility wrappers** that exec `loop run` in a target
+  dir (the count argument only lowers `loop.max_sessions`). The old bash/PowerShell drivers, their
+  `run-loop-*.log` files and the per-cycle iteration counter are gone; logs are `logs/loop.jsonl`
+  (`loop logs`) plus `logs/escalations.md`.
+- **Flow per task:** claim -> `task/...` branch -> freeze verify inputs and caps -> `set-goal` ->
+  `claude -p /council-loop:council-cycle --plugin-dir ... --permission-mode <loop.permission_mode>`
+  sessions (env `COUNCIL_LOOP_RUN=1`) until `stop.flag` -> the runner runs the checks, enforces
+  `loop.protected_paths`, and merges. Exit codes: 0 nothing pending/failed (blocked tasks are escalated, still 0), 1 cap/failures/crash, 2 refused.
+- **`stop.flag` handling:** cleared before each session, read after. `goal complete` and the
+  `max_cycles`/`max_minutes reached` flags go to the verify gate; anything else (`blocked: ...`)
+  blocks the task. Failed sessions back off (`loop.backoff`, or a parsed reset time).
+- **Recovery:** on start, under `run.lock`, an orphaned `cycle.lock` is removed, a half merge is
+  aborted, merged-but-unrecorded tasks become `done`, other claimed tasks go back to `pending`
+  (or `blocked` if inputs changed). A fresh `cycle.lock` with no claimed task is a manual
+  `/council-cycle`, so the run refuses (exit 2). Dirty trees are saved with `git stash push -u`,
+  never re-applied, and the SHA is recorded as a task note (`loop status` lists them).
+- **Config:** `loop.*` in `.council/config.json` (defaults in `DEFAULT_LOOP`, `council_state.py`;
+  unknown keys rejected; `permission_mode` `bypassPermissions` refused). Protected paths default
+  to tests, test configs, `scripts/validate.sh`, CI workflows.
+- **Escalation:** `scripts/loop_notify.py` posts a NEXUS flag (`/api/safety/flags`) when
+  `loop.notify.enabled` is true (default false); the key is fetched by name through
+  `loop.secrets` (`command`/`env`/`infisical`) once at run start (so it is masked before any
+  session output is written; failure logs `notify key_unavailable` and the run continues). HTTP
+  redirects are never followed. Failures are logged as `[undelivered]`, never fatal.
+- **Windows:** the suite passed on Windows 11 (Tiny11) at commit a44b146 (see `reviews/windows-tiny11.txt`).
+
+## Brain event loopback (best-effort, end of a `loop run`)
 
 - Optional `brain_events` config block (`{"enabled": false, "url": "http://127.0.0.1:8765"}`, defaults
   injected like `dynamic_agents` when the key is absent from an older config, and **off by default**
-  since this is a personal-infra integration most projects won't have) lets `run-loop.ps1` POST a
-  single summary note to the Brain MCP server (`POST $url/raw`) after a driver run, so the
-  02:00 Brain Organizer can fold "a council run happened" into wiki memory.
-- **One event per driver run, never per cycle.** `run-loop.ps1` captures `$runStart` (UTC ISO-8601)
-  before its `for` loop, then — after the loop, at the single point every exit path (pre-cycle
-  stop.flag, post-cycle stop.flag, ceiling exhaustion) converges — runs one `try/catch` block that
-  reads `brain_events` from `python3 scripts/council_state.py --root <target project> effective-config`
-  (stdout only, stderr discarded) and, if enabled, calls `python3 scripts/council_state.py --root
-  <target project> run-summary --since $runStart`.
-  A non-empty result becomes the event body (`event-council-loop-run-complete-<ts>.md`) posted via
-  `Invoke-RestMethod` with a 5s timeout; empty output (nothing recorded this run) is a silent no-op.
-- **Manual `/council-cycle` invocations never emit** — only the `run-loop.ps1` driver does, because
-  the summary is derived from `history.jsonl` at driver-exit time. A session that runs `/council-cycle`
-  by hand (without `.\run-loop.ps1`) will not produce a Brain event; this is a known, documented
-  limitation, not a bug.
-- **Best-effort, loopback-only, never fatal.** The whole emit block is wrapped in one `try/catch`
-  that swallows every exception and just logs a skip line — a missing `python3`, an unreachable/down
-  Brain server, `brain_events.enabled: false`, or empty `run-summary` output must never change
-  `run-loop.ps1`'s exit code or normal exit behavior. There are no retries and no buffering; a dropped
-  event is acceptable (`history.jsonl` remains the system of record).
+  since this is a personal-infra integration most projects won't have). When enabled,
+  `Runner._brain_event` (`scripts/loop_runner.py`) POSTs one summary note to the Brain MCP server
+  (`POST $url/raw`, 5s timeout) after a run.
+- **One event per run, never per cycle.** It lives in the runner's `_end_of_run`, which every exit
+  path reaches. It calls `python3 scripts/council_state.py --root <project> run-summary --since
+  <run start>`; empty output (nothing recorded) is a silent no-op. The note is
+  `event-council-loop-run-complete-<ts>.md`.
+- **Manual `/council-cycle` invocations never emit** — only `loop run` (or the wrappers) does. This
+  is a known, documented limitation, not a bug.
+- **Best-effort, never fatal.** Any exception becomes one `brain_event`/`skipped` line in
+  `logs/loop.jsonl` and never changes the exit code. No retries or buffering; `history.jsonl`
+  remains the system of record.
 
-## NEXUS post-mortem trigger (best-effort, driver-only, 2026-07-27)
+## NEXUS post-mortem trigger (best-effort, end of a `loop run`)
 
-- Both drivers delegate to `scripts/postmortem_payload.py` at driver exit (`python3 scripts/postmortem_payload.py
-  --root <target project>`) rather than each building the request themselves. That one script builds the payload
-  (`target_repo_name`, `commit_prefix`, `goal`, `history`, `transcripts`, plus a derived git commit range
-  with `log`/`files_changed`/`ls_tree_last`/per-file `py_files` diffs — see the script's own docstring) and
-  POSTs it to NEXUS's `POST /api/trigger`, so NEXUS independently re-verifies the Realist's claims for this
-  run (deterministic checks + one Haiku extraction call — see NEXUS's own `CLAUDE.md`/
-  `backend/agents/council_postmortem.py` for what the check actually does). One implementation shared by
-  `run-loop.ps1` and `run-loop.sh` so the payload contract can't drift between the two drivers — the old
-  design had `run-loop.ps1` POST a bare `{"since": ...}` and let NEXUS read Council-loop's git history off
-  local disk itself, which stopped working once NEXUS moved to nexus-lxc while Council-loop stays on
-  whichever machine is actually running it.
-- **One call per driver run, never per cycle** — same convergence point as the Brain event above (the
-  single spot after the `for` loop that every exit path reaches), in its own separate `try`/`catch` (or
-  bash equivalent) so a down Brain server can't skip this call or vice versa. Fires here, not on a
-  schedule, because `/goal` MOVES `.council/state/history.jsonl` into a timestamped folder under
-  `.council/state/archive/` on the *next* session (see `/goal`'s own spec) rather than leaving it at a
-  fixed path — the data survives, but a scheduled poller watching that fixed path would still miss the
-  window and never find this session's history at all.
-- **Auth is `NEXUS_API_KEY`** (an environment variable; `postmortem_payload.py` also falls back to
-  `~/.config/nexus/api_key` if the env var is unset), optionally `NEXUS_BASE_URL` (default
-  `http://127.0.0.1:8000` — a harmless local placeholder; set this to wherever your own NEXUS
-  instance actually runs) — a machine-level setting, never written into any tracked or `config.local.json`
-  file (this repo has no baked-in default hostname; it's personal infra, not something a public plugin
-  should ship pointed at). Set
-  the env var once with `[Environment]::SetEnvironmentVariable("NEXUS_API_KEY", "<key>", "User")` on
-  Windows, or an export in your shell profile on Linux/macOS. Neither set is not an error: the script
-  prints `"council post-mortem skipped: no NEXUS_API_KEY (env or ~/.config/nexus/api_key)"` and exits 0 —
-  the feature is simply inert until one of those two is set.
-- **Manual `/council-cycle` invocations never trigger this** — same documented limitation as the Brain
-  event loopback, for the same reason (`history.jsonl` is only meaningful read at driver-exit time).
-- **Best-effort, never fatal, 120s timeout.** `/api/trigger` runs the post-mortem synchronously, so the
-  timeout is generous on purpose (the driver run is already over — nothing else is blocked by waiting).
-  A down NEXUS, a rotated/missing key (401), or the endpoint's rate limit (429) all degrade to one
-  logged skip line, exactly like a Brain-server outage does for the event loopback above.
+- `_end_of_run` also runs `python3 scripts/postmortem_payload.py --root <project>` (150s subprocess
+  timeout) and logs a `postmortem` event with the output tail. That one script builds the payload
+  (`target_repo_name`, `commit_prefix`, `goal`, `history`, `transcripts`, plus a derived git commit
+  range with `log`/`files_changed`/`ls_tree_last`/per-file `py_files` diffs — see its docstring) and
+  POSTs it to NEXUS's `POST /api/trigger`, so NEXUS independently re-verifies the Realist's claims
+  (deterministic checks + one Haiku extraction call — see NEXUS's own `CLAUDE.md`/
+  `backend/agents/council_postmortem.py`). It posts the payload itself because NEXUS may live on
+  another machine from the one running the loop.
+- **One call per run, never per cycle**, in its own `try` so a down Brain server can't skip it or
+  vice versa. It fires at run end because `set-goal` MOVES `.council/state/history.jsonl` into
+  `.council/state/archive/` for the next attempt/session (known limit: a multi-attempt run reports
+  its last attempt only; see LATER.md).
+- **Auth is `NEXUS_API_KEY`** in the script's environment (falling back to
+  `~/.config/nexus/api_key`), posted to `NEXUS_BASE_URL` (default `http://127.0.0.1:8000`). The
+  script never reads the config itself: the runner fetches the key through the `loop.secrets`
+  backend and resolves the URL (`loop.notify.nexus_url`, else env, else default) from the config
+  loaded at run START, and passes both in the child's environment — a session that rewrites the
+  config cannot redirect the key. Redirects are not followed. With no key the script prints
+  `"council post-mortem skipped: no NEXUS_API_KEY (env or ~/.config/nexus/api_key)"` and exits 0.
+- **Manual `/council-cycle` invocations never trigger this.** **Best-effort, never fatal.**
+  A down NEXUS, a rotated/missing key (401, which `loop status` flags) or a rate limit (429)
+  degrade to one logged skip line.
