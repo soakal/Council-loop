@@ -12,6 +12,7 @@ from pathlib import Path
 
 import council_state
 import discover_tests
+import loop_notify
 
 
 KNOWN_MODEL_ALIASES = {"opus", "sonnet", "haiku", "fable"}
@@ -126,6 +127,18 @@ def main() -> int:
             detail = "known alias" if status == "OK" else "custom/unknown model; verify Claude Code supports it"
             add(results, status, f"model.{role}", f"{model} ({detail})")
 
+        loop_cfg = config.get("loop") or {}
+        notify_cfg = loop_cfg.get("notify") or {}
+        # Only fetch the key when escalation is on, so default-config runs (validate.sh, CI) never call a real secret store.
+        if loop_cfg.get("secrets") and notify_cfg.get("enabled"):
+            key_name = notify_cfg.get("api_key_secret") or "NEXUS_API_KEY"
+            backend = loop_cfg["secrets"].get("backend", "command")
+            try:
+                loop_notify.get_secret(key_name, loop_cfg["secrets"])  # value discarded, never printed
+                add(results, "OK", f"{key_name} secret", f"fetched via {backend} backend")
+            except Exception as exc:  # NotifyError messages never contain the value
+                add(results, "WARN", f"{key_name} secret", str(exc))
+
         configured_tests = config.get("test_commands", [])
         if configured_tests:
             add(results, "OK", "test commands", ", ".join(configured_tests))
@@ -138,6 +151,9 @@ def main() -> int:
 
     add(results, "OK" if shutil.which("git") else "FAIL", "git executable", shutil.which("git") or "not found")
     add(results, "OK" if shutil.which("python3") else "FAIL", "python3 executable", shutil.which("python3") or "not found")
+    launcher = next((shutil.which(n) for n in ("python3", "python", "py") if shutil.which(n)), None)
+    add(results, "OK" if launcher else "FAIL", "python launcher", launcher or "none of python3/python/py on PATH -- "
+        "the PreToolUse guard hook (scripts/hooks/guard.py) cannot run without one")
     add(results, "OK" if shutil.which("claude") else "WARN", "claude executable", shutil.which("claude") or "not on PATH")
     add(
         results,

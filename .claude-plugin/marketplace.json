@@ -9,6 +9,7 @@
     {
       "name": "council-loop",
       "source": "./",
+      "version": "1.2.0",
       "description": "Autonomous plan -> implement -> audit -> test -> review -> commit cycle driven by a five-role council, running entirely on Claude Code primitives."
     }
   ]
