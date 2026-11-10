@@ -38,3 +38,19 @@ Approximate. Tokens are what the harness reports per subagent; "Codex" rows are 
 | T9 | implement (fallback) | Opus 5.5 | ~109k | 175 tests pass; notify.enabled default false |
 | Windows | Tiny11 test runs ×2 | orchestrator | — | run1 3e0b7b3: 1 fail/33 err; run2 9139f8e: 166 OK |
 | T9+T10w | review | Fable 5.2 | see notification | T10w APPROVE incl. 3 test changes; T9 CHANGES (id:null not paged, test_cli hits real secret) |
+| T9 | review fixes | Opus 5.5 | ~12k (incremental) | 178 tests; T9+T10w Fable review ~91k |
+| t10 | review (loop-built) | Fable 5.2 | see notification | APPROVE; validate.sh change approved via loop resume --approve-tests |
+| Dogfood runs 3–4 | loop run | council via claude -p | 4 sessions $4.77 (run 4) | t09 done+merged by gate; t10 blocked (test change → approved); t11 blocked (classifier) |
+| Dogfood run 5 | loop run | council via claude -p | 2 sessions $1.85 | t10 done+merged by gate; t11 blocked 2nd time (Verifier new-file Write refused) → fallback Opus build |
+| t10 review | Fable 5.2 | ~67k |
+| T11 | finish (fallback: Verifier Write refused ×2) | Opus 5.5 | ~91k | 182→184 tests; test change: 2 test_runner assertions updated to /dir/* exclude pattern |
+| T11 | review | Fable 5.2 | ~66k | APPROVE; + orchestrator 2-line fix (doctor key fetch only when notify enabled) |
+| Dogfood run 6 | loop run | council via claude -p | 2 sessions $2.24 | t11 done+merged by gate; t12 blocked: classifier no verdict on README edit (not content-specific) |
+| T12 | docs (fallback: classifier no verdict on README) | Sonnet 5.5 | ~139k | 185 tests; validate.sh README coverage check |
+| T12 | review | Fable 5.2 | see notification | CHANGES (3 doc accuracy fixes); validate.sh check negative-tested |
+| Final | Codex checkpoint | Codex CLI | ~43k | 6 findings (2 high) |
+| T12 | review fixes | Sonnet 5.5 | ~3k | ; orchestrator 1-line doctor sys.path fix found on Windows |
+| Final | Codex triage | Fable 5.2 | ~91k | 4 accept, 1 part, 1 reject |
+| T12b | final Codex fixes | Opus 5.5 | ~108k | 189 tests; Fable APPROVE (~72k) |
+| Dogfood run 7 | loop run (t12) | council via claude -p | 1 session $0.64 | t12 done+merged by gate |
+| **Loop total** | 7 runs | council via claude -p | 12 sessions, ~2.9M tokens, **$12.28** | from `loop status` (cost_usd in logs/loop.jsonl) |

@@ -21,3 +21,5 @@ One line per item. Nothing here gets built without a new approved plan.
 - Direct `python -c`/script edits to other tasks' entries in tasks.json remain tripwire-only (§9).
 - Gate: a frozen check that calls an unprotected script (e.g. `npm test` -> `scripts/run-tests.sh`, a Makefile target) can still be emptied by the model (tripwire limit; T8b protects only runner config + package.json `scripts` / pyproject `tool.pytest`).
 - Notify: retry undelivered escalations (resend pass at run start/end; keep one page per task/event).
+- Headless permission: in `claude -p` loop runs the default `auto` mode classifier often returned "no verdict" on subagent Write/Edit (t09, t11, t12), blocking tasks cleanly; pre-allowing edit tools helped only partly. Owner decision pending: keep `auto`, or `acceptEdits` + explicit Bash allowlist in `loop.allowed_tools`.
+- Live NEXUS page not yet tested end to end (notify off overnight); also the guard hook under Claude Code on Windows (Tiny11 has no Claude Code).
