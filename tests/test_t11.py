@@ -80,8 +80,12 @@ class T11Tests(unittest.TestCase):
 
     # (1) doctor: python launcher found; NEXUS_API_KEY via the env backend (never the real `secret` CLI)
     def test_doctor_launcher_and_secret_check(self):
-        (self.repo / ".council" / "config.local.json").write_text(json.dumps({"loop": {"secrets": {"backend": "env"}}}))
         doctor = [sys.executable, str(DOCTOR), "--root", str(self.repo)]
+        # Notify off (the default): the doctor must not try to fetch the key at all.
+        (self.repo / ".council" / "config.local.json").write_text(json.dumps({"loop": {"secrets": {"backend": "env"}}}))
+        out = subprocess.run(doctor, cwd=self.repo, env=self.env, capture_output=True, text=True, timeout=120).stdout
+        self.assertNotIn("NEXUS_API_KEY secret", out)
+        (self.repo / ".council" / "config.local.json").write_text(json.dumps({"loop": {"secrets": {"backend": "env"}, "notify": {"enabled": True}}}))
         out = subprocess.run(doctor, cwd=self.repo, env=self.env, capture_output=True, text=True, timeout=120).stdout
         self.assertRegex(out, r"OK.*python launcher")
         self.assertRegex(out, r"WARN.*NEXUS_API_KEY secret.*not set \(env backend\)")

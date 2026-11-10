@@ -128,14 +128,16 @@ def main() -> int:
             add(results, status, f"model.{role}", f"{model} ({detail})")
 
         loop_cfg = config.get("loop") or {}
-        if loop_cfg.get("secrets"):
-            key_name = (loop_cfg.get("notify") or {}).get("api_key_secret") or "NEXUS_API_KEY"
+        notify_cfg = loop_cfg.get("notify") or {}
+        # Only fetch the key when escalation is on, so default-config runs (validate.sh, CI) never call a real secret store.
+        if loop_cfg.get("secrets") and notify_cfg.get("enabled"):
+            key_name = notify_cfg.get("api_key_secret") or "NEXUS_API_KEY"
             backend = loop_cfg["secrets"].get("backend", "command")
             try:
                 loop_notify.get_secret(key_name, loop_cfg["secrets"])  # value discarded, never printed
-                add(results, "OK", "NEXUS_API_KEY secret", f"fetched via {backend} backend")
+                add(results, "OK", f"{key_name} secret", f"fetched via {backend} backend")
             except Exception as exc:  # NotifyError messages never contain the value
-                add(results, "WARN", "NEXUS_API_KEY secret", str(exc))
+                add(results, "WARN", f"{key_name} secret", str(exc))
 
         configured_tests = config.get("test_commands", [])
         if configured_tests:
