@@ -166,6 +166,8 @@ def _status(project: Path) -> dict:
         "stashes": stashes,
         "usage": _usage(loop_log.tail(logs_dir, n=1_000_000), datetime.now(timezone.utc)),
         "escalations": [ln for ln in esc_lines if ln.strip()],
+        # The runner appends an [undelivered] line right after an escalation NEXUS did not get.
+        "escalation_undelivered": any("[undelivered]" in ln for ln in esc_lines[-1:]),
     }
 
 
@@ -184,6 +186,8 @@ def cmd_status(args) -> int:
         print(f"stash on {s['task_id']} at {s['at']}: {s['text']}  (inspect with git stash list)")
     for label, u in (("last run", st["usage"]["last_run"]), ("last 24 h", st["usage"]["last_24h"])):
         print(f"usage {label}: {u['sessions']} session(s), ${u['cost_usd']:.2f}, {u['tokens']} tokens")
+    if st["escalation_undelivered"]:
+        print("WARNING: the last escalation could not be delivered to NEXUS (see logs/escalations.md)")
     if st["escalations"]:
         print("recent escalations:")
         for ln in st["escalations"]:

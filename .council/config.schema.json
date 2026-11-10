@@ -126,9 +126,9 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "enabled": { "type": "boolean" },
-            "telegram_token_secret": { "type": "string", "minLength": 1, "description": "Secret NAME (not value) of the Telegram bot token." },
-            "telegram_chat_secret": { "type": "string", "minLength": 1, "description": "Secret NAME (not value) of the owner's Telegram chat id." }
+            "enabled": { "type": "boolean", "description": "Page the owner through NEXUS on blocked tasks, caps and crashes. Default false (personal infra; tests and fresh projects never touch the network); turn on in config.local.json." },
+            "nexus_url": { "type": "string", "description": "NEXUS base URL for escalations (POST /api/safety/flags). Empty = env NEXUS_BASE_URL, else http://127.0.0.1:8000. Put a real host in config.local.json, never a tracked file." },
+            "api_key_secret": { "type": "string", "minLength": 1, "description": "Secret NAME (not value) of the NEXUS API key, fetched through loop.secrets." }
           }
         }
       }
