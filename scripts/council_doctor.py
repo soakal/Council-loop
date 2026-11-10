@@ -10,6 +10,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Make sibling modules importable even when Python doesn't add the script dir (-I, embeddable Windows Python).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 import council_state
 import discover_tests
 import loop_notify
