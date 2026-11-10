@@ -787,8 +787,8 @@ class Runner:
 
     def _ev(self, event: str, task_id=None, outcome=None, **extra) -> None:
         self.log.event(event, run_id=self.run_id, task_id=task_id, outcome=outcome, **extra)
-        print(f"[loop] {event} {task_id or '-'} {outcome or ''} {extra.get('reason') or ''}".rstrip(),
-              flush=True)
+        print(redact(f"[loop] {event} {task_id or '-'} {outcome or ''} {extra.get('reason') or ''}".rstrip()),
+              flush=True)  # console gets the same masking as loop.jsonl
 
     def _task(self, task_id: str) -> dict:
         return next(t for t in self.store.load() if t["id"] == task_id)
