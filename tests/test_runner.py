@@ -691,6 +691,31 @@ class HardeningTests(unittest.TestCase):
         self.assertEqual(self.task()["status"], "done")
         self.assertFalse((self.repo / ".council" / "state" / "session.pid").exists())
 
+    # review: on Windows a leftover pidfile is never taskkilled (the pid may be reused)
+    def test_windows_stale_pidfile_never_taskkilled(self):
+        pidfile = self.repo / ".council" / "state" / "session.pid"
+        pidfile.parent.mkdir(parents=True, exist_ok=True)
+        pidfile.write_text(json.dumps({"pid": os.getpid(), "start": None}))
+        # lr.Path pinned to the native class so a faked os.name can't make a WindowsPath on older Pythons.
+        with mock.patch.object(lr.os, "name", "nt"), mock.patch.object(lr, "Path", type(pidfile)), \
+                mock.patch.object(lr.subprocess, "run") as run, mock.patch.object(lr.os, "killpg") as killpg:
+            self.assertEqual(lr.kill_stale_session(pidfile), "stale")
+        run.assert_not_called()
+        killpg.assert_not_called()
+        self.assertFalse(pidfile.exists())
+
+    # review: a Job Object whose assign fails is closed, and the command still runs
+    def test_job_closed_when_assign_fails(self):
+        import io
+        fake = mock.Mock()
+        fake.create.return_value = 42
+        fake.assign.side_effect = OSError("access denied")
+        with mock.patch.object(lr.os, "name", "nt"), mock.patch.dict(sys.modules, {"win_job": fake}), \
+                mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            self.assertIsNone(lr._job_create(mock.Mock()))
+        fake.close.assert_called_once_with(42)
+        self.assertIn("Job Object unavailable", err.getvalue())
+
     # 4. Windows Job Object: a detached grandchild dies with the command
     @unittest.skipUnless(os.name == "nt", "Job Objects are Windows-only")
     def test_job_object_kills_detached_child(self):

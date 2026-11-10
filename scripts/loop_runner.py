@@ -92,6 +92,8 @@ def _kill_tree(proc: subprocess.Popen) -> None:
 
 def _proc_start(pid: int) -> str | None:
     """Process start time (field 22 of /proc/<pid>/stat), to tell a reused pid apart; None if unknown."""
+    # shortcut: no /proc on macOS -> start is always None, so the pid-reuse guard is off there;
+    # upgrade with `ps -o lstart= -p <pid>` if loop runs on macOS become common.
     try:
         return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
     except (OSError, IndexError):
@@ -102,12 +104,15 @@ def _job_create(proc: subprocess.Popen):
     """Windows: put proc in a kill-on-close Job Object. None elsewhere or on any failure."""
     if os.name != "nt":
         return None
+    job = None
     try:
         import win_job
         job = win_job.create()
         win_job.assign(job, proc)
         return job
     except Exception as exc:  # never refuse to run: fall back to taskkill-only cleanup
+        if job is not None:
+            win_job.close(job)  # assign failed: free the (empty) job's handle
         print(f"[loop] warning: Job Object unavailable ({exc}); stray child processes may survive",
               file=sys.stderr)
         return None
@@ -195,10 +200,10 @@ def kill_stale_session(pidfile: Path) -> str | None:
         Path(pidfile).unlink(missing_ok=True)  # unreadable: nothing we can safely kill
         return "stale"
     if os.name == "nt":
-        # The Job Object normally killed the tree with the runner; this is a best-effort extra.
-        subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True)
+        # The kill-on-close Job Object died with the runner and took the tree with it; a pid alone
+        # can't prove identity on Windows, so never taskkill it (it may be reused by now).
         Path(pidfile).unlink(missing_ok=True)
-        return "killed"
+        return "stale"
     start, now_start = info.get("start"), _proc_start(pid)
     if not _group_alive(pid) or (start and now_start and start != now_start):
         Path(pidfile).unlink(missing_ok=True)  # gone, or the pid now belongs to someone else
@@ -339,16 +344,17 @@ def _glob_match(path: str, glob: str) -> bool:
     return glob.startswith("**/") and fnmatch.fnmatchcase(path, glob[3:])
 
 
+PKG_TEST_KEYS = ("scripts", "jest", "mocha")  # package.json keys that can change what `npm test` runs
 _UNPARSEABLE = object()  # never equal to anything, so an unreadable side always counts as a change
 
 
 def _test_section(repo, rev: str, path: str):
-    """The part of a manifest that defines how tests run: package.json `scripts`, pyproject `tool.pytest`."""
+    """The part of a manifest that defines how tests run: package.json `scripts`/`jest`/`mocha`, pyproject `tool.pytest`."""
     try:
         text = run_git(repo, "show", f"{rev}:{path}")
         if path.rsplit("/", 1)[-1] == "package.json":
             data = json.loads(text)
-            return data.get("scripts") if isinstance(data, dict) else _UNPARSEABLE
+            return {k: data.get(k) for k in PKG_TEST_KEYS} if isinstance(data, dict) else _UNPARSEABLE
         import tomllib  # Python 3.11+; ImportError -> any pyproject change counts
         return (tomllib.loads(text).get("tool") or {}).get("pytest")
     except (GitError, ValueError, ImportError, AttributeError):  # tomllib/json errors are ValueErrors
@@ -372,7 +378,12 @@ def protected_changes(repo, base: str, branch: str, globs: list[str]) -> list[st
         elif path.rsplit("/", 1)[-1] in ("package.json", "pyproject.toml"):
             old, new = _test_section(repo, mb, path), _test_section(repo, branch, path)
             if old is _UNPARSEABLE or new is _UNPARSEABLE or old != new:
-                section = "scripts" if path.endswith("package.json") else "tool.pytest"
+                if path.endswith("pyproject.toml"):
+                    section = "tool.pytest"
+                elif old is _UNPARSEABLE or new is _UNPARSEABLE:
+                    section = "scripts"
+                else:
+                    section = ", ".join(k for k in PKG_TEST_KEYS if old[k] != new[k])
                 hits.append(f"{path} ({section})")
     return hits
 

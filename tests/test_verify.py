@@ -254,6 +254,14 @@ class HardeningGateTests(unittest.TestCase):
         self.assertEqual(res["status"], "blocked")
         self.assertIn("web/package.json (scripts)", res["reason"])
 
+    def test_package_json_jest_and_mocha_keys_block(self):
+        self.on_dev("package.json", json.dumps({**self.PKG, "jest": {"testMatch": ["**/*.test.js"]}}))
+        task, frozen = self.claim()
+        commit(self.repo, "package.json", json.dumps({**self.PKG, "jest": {"testMatch": []}, "mocha": {"spec": []}}))
+        res = self.finish(task, frozen)
+        self.assertEqual(res["status"], "blocked")
+        self.assertIn("package.json (jest, mocha)", res["reason"])
+
     def test_package_json_unparseable_blocks(self):
         self.on_dev("package.json", json.dumps(self.PKG))
         task, frozen = self.claim()
