@@ -63,6 +63,10 @@ DEFAULT_LOOP: dict[str, Any] = {
     "log_backups": 5,
     "session_logs_keep": 200,
     "claude_bin": "claude",
+    # Passed to every loop session as --permission-mode; bypassPermissions is refused.
+    "permission_mode": "auto",
+    # Extra --allowedTools entries for loop sessions (empty = no flag).
+    "allowed_tools": [],
     "protected_paths": [
         "tests/**",
         "**/test_*",
@@ -92,6 +96,7 @@ DEFAULT_LOOP: dict[str, Any] = {
     },
 }
 SECRETS_BACKENDS = ("command", "env", "infisical")
+PERMISSION_MODES = ("acceptEdits", "auto", "dontAsk", "manual", "plan")
 PROTECTED_BASE_BRANCHES = ("main", "master")
 
 # A held cycle.lock older than this is assumed to belong to a crashed/killed prior
@@ -306,6 +311,14 @@ def validate_loop_block(loop: Any) -> None:
             raise ValueError(f"loop.{key} must be a project-relative path, not absolute: {value!r}")
         if ".." in re.split(r"[\\/]", value):
             raise ValueError(f"loop.{key} must not contain a '..' component: {value!r}")
+    if loop.get("permission_mode") == "bypassPermissions":
+        raise ValueError("loop.permission_mode bypassPermissions is refused: unattended sessions must keep "
+                         f"permission checks -- use one of: {', '.join(PERMISSION_MODES)}")
+    if loop.get("permission_mode") not in PERMISSION_MODES:
+        raise ValueError(f"loop.permission_mode must be one of: {', '.join(PERMISSION_MODES)}")
+    tools = loop.get("allowed_tools")
+    if not isinstance(tools, list) or not all(_is_text(item) for item in tools):
+        raise ValueError("loop.allowed_tools must be an array of non-empty strings")
     paths = loop.get("protected_paths")
     if not isinstance(paths, list) or not all(_is_text(item) for item in paths):
         raise ValueError("loop.protected_paths must be an array of non-empty strings")

@@ -47,6 +47,8 @@
     "log_backups": 5,
     "session_logs_keep": 200,
     "claude_bin": "claude",
+    "permission_mode": "auto",
+    "allowed_tools": [],
     "protected_paths": [
       "tests/**",
       "**/test_*",
