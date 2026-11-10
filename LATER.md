@@ -14,3 +14,5 @@ One line per item. Nothing here gets built without a new approved plan.
 - Fix the age-based `cycle.lock` for manual `/loop` use (loop runs no longer depend on it).
 - Remote branch `origin/claude/agents-used-euwqve` (Verifier tally in run-summary) — left alone by owner decision 2026-11-09.
 - Guard: Windows backslash paths in Bash (posix shlex) and a PowerShell tool matcher — verify on Tiny11; `find -exec rm -rf` not covered (advisory hook).
+- Gate: treat newly ADDED test-config files (conftest.py, pytest.ini, tox.ini) as protected hits.
+- Gate: a model committing directly to base / rebasing can hide a test edit from the merge-base diff (tripwire limit, §9).
