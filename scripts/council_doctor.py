@@ -103,6 +103,14 @@ def main() -> int:
         config = None
 
     if config:
+        # Loop-mode problems are warnings: a project may never use loop mode.
+        loop_errors = council_state.validate_loop_mode(config)
+        if loop_errors:
+            for error in loop_errors:
+                add(results, "WARN", "loop mode", error)
+        else:
+            add(results, "OK", "loop mode", "config is loop-mode compatible")
+
         target = target_path(root, config)
         add(results, "WARN" if target == plugin_root else "OK", "target repo", str(target))
         git_dir = run_git(target, "rev-parse", "--git-dir")

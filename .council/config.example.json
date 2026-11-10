@@ -1,5 +1,5 @@
 {
-  "target_repo": "C:/absolute/path/to/your/repo",
+  "target_repo": ".",
   "git_clone_url": "https://github.com/you/your-repo.git",
   "ceiling": {
     "max_cycles": 10,
@@ -27,5 +27,48 @@
   "verifier": {
     "enabled": true,
     "max_test_files": 2
+  },
+  "loop": {
+    "max_attempts": 3,
+    "max_sessions": 50,
+    "max_hours": 12,
+    "session_timeout_minutes": 90,
+    "verify_timeout_minutes": 30,
+    "backoff": {
+      "base_seconds": 60,
+      "max_seconds": 3600,
+      "jitter": 0.1
+    },
+    "base_branch": null,
+    "branch_prefix": "task/",
+    "tasks_file": "tasks/tasks.json",
+    "logs_dir": "logs",
+    "log_max_bytes": 5242880,
+    "log_backups": 5,
+    "session_logs_keep": 200,
+    "claude_bin": "claude",
+    "protected_paths": [
+      "tests/**",
+      "**/test_*",
+      "**/*_test.*",
+      "**/*.spec.*",
+      "**/conftest.py",
+      "pytest.ini",
+      "tox.ini",
+      "scripts/validate.sh",
+      ".github/workflows/**"
+    ],
+    "secrets": {
+      "backend": "command",
+      "command": [
+        "secret", "run", "{name}", "--",
+        "python3", "-c", "import os,sys;sys.stdout.write(os.environ[sys.argv[1]])", "{name}"
+      ]
+    },
+    "notify": {
+      "enabled": true,
+      "telegram_token_secret": "NIGHTSHIFT_TELEGRAM_BOT_TOKEN",
+      "telegram_chat_secret": "NIGHTSHIFT_TELEGRAM_OWNER_ID"
+    }
   }
 }

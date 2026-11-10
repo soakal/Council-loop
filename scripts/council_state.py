@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import re
@@ -45,6 +46,52 @@ DEFAULT_DYNAMIC_AGENTS = {"enabled": False, "max_parallel": 4, "timeout_minutes"
 DEFAULT_VERIFIER = {"enabled": True, "max_test_files": 2}
 DEFAULT_BRAIN_EVENTS = {"enabled": False, "url": "http://127.0.0.1:8765"}
 
+# Loop-mode (outer runner) settings. Injected key-by-key (nested blocks too) when
+# absent, so configs written before loop mode keep loading unchanged.
+DEFAULT_LOOP: dict[str, Any] = {
+    "max_attempts": 3,
+    "max_sessions": 50,
+    "max_hours": 12,
+    "session_timeout_minutes": 90,
+    "verify_timeout_minutes": 30,
+    "backoff": {"base_seconds": 60, "max_seconds": 3600, "jitter": 0.1},
+    "base_branch": None,
+    "branch_prefix": "task/",
+    "tasks_file": "tasks/tasks.json",
+    "logs_dir": "logs",
+    "log_max_bytes": 5242880,
+    "log_backups": 5,
+    "session_logs_keep": 200,
+    "claude_bin": "claude",
+    "protected_paths": [
+        "tests/**",
+        "**/test_*",
+        "**/*_test.*",
+        "**/*.spec.*",
+        "**/conftest.py",
+        "pytest.ini",
+        "tox.ini",
+        "scripts/validate.sh",
+        ".github/workflows/**",
+    ],
+    "secrets": {
+        "backend": "command",
+        # "{name}" is replaced by the secret's name. The value comes back on the
+        # helper's stdout only -- it never appears in any process's argv.
+        "command": [
+            "secret", "run", "{name}", "--",
+            "python3", "-c", "import os,sys;sys.stdout.write(os.environ[sys.argv[1]])", "{name}",
+        ],
+    },
+    "notify": {
+        "enabled": True,
+        "telegram_token_secret": "NIGHTSHIFT_TELEGRAM_BOT_TOKEN",
+        "telegram_chat_secret": "NIGHTSHIFT_TELEGRAM_OWNER_ID",
+    },
+}
+SECRETS_BACKENDS = ("command", "env", "infisical")
+PROTECTED_BASE_BRANCHES = ("main", "master")
+
 # A held cycle.lock older than this is assumed to belong to a crashed/killed prior
 # invocation rather than a live one, and begin-cycle reclaims it automatically.
 STALE_LOCK_MINUTES = 60
@@ -70,6 +117,16 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
         else:
             merged[key] = value
     return merged
+
+
+def _fill_defaults(target: dict[str, Any], defaults: dict[str, Any]) -> None:
+    """setdefault every key of defaults into target, recursing into nested
+    objects present on both sides (a wrong-typed value is left for validation)."""
+    for key, value in defaults.items():
+        if key not in target:
+            target[key] = copy.deepcopy(value)
+        elif isinstance(value, dict) and isinstance(target[key], dict):
+            _fill_defaults(target[key], value)
 
 
 def load_config(root: Path) -> dict[str, Any]:
@@ -106,6 +163,10 @@ def load_config(root: Path) -> dict[str, Any]:
     elif isinstance(config["brain_events"], dict):
         for key, value in DEFAULT_BRAIN_EVENTS.items():
             config["brain_events"].setdefault(key, value)
+    if "loop" not in config:
+        config["loop"] = copy.deepcopy(DEFAULT_LOOP)
+    elif isinstance(config["loop"], dict):
+        _fill_defaults(config["loop"], DEFAULT_LOOP)
     validate_config(config)
     return config
 
@@ -166,6 +227,10 @@ def validate_config(config: dict[str, Any]) -> None:
         ):
             raise ValueError("brain_events.url must be a non-empty string")
 
+    loop = config.get("loop")
+    if loop is not None:
+        validate_loop_block(loop)
+
     if not isinstance(config["target_repo"], str) or not config["target_repo"].strip():
         raise ValueError("target_repo must be a non-empty string")
     if not isinstance(config["revise_attempts"], int) or config["revise_attempts"] < 0:
@@ -184,6 +249,101 @@ def validate_config(config: dict[str, Any]) -> None:
         raise ValueError("auto_commit must be a boolean")
     if not isinstance(config["commit_prefix"], str):
         raise ValueError("commit_prefix must be a string")
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _is_text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def validate_loop_block(loop: Any) -> None:
+    """Type/range checks for the loop block (run after defaults are filled in)."""
+    if not isinstance(loop, dict):
+        raise ValueError("loop must be an object")
+    unknown = sorted(set(loop) - set(DEFAULT_LOOP))
+    if unknown:
+        # Catches typos that would otherwise silently fall back to a default.
+        raise ValueError(f"loop has unknown key(s): {', '.join(unknown)}")
+    for key in (
+        "max_attempts", "max_sessions", "session_timeout_minutes", "verify_timeout_minutes",
+        "log_max_bytes", "log_backups", "session_logs_keep",
+    ):
+        if not _is_int(loop.get(key)) or loop[key] < 1:
+            raise ValueError(f"loop.{key} must be an integer >= 1")
+    if not _is_number(loop.get("max_hours")) or loop["max_hours"] <= 0:
+        raise ValueError("loop.max_hours must be a number > 0")
+
+    backoff = loop.get("backoff")
+    if not isinstance(backoff, dict):
+        raise ValueError("loop.backoff must be an object")
+    for key in ("base_seconds", "max_seconds"):
+        if not _is_number(backoff.get(key)) or backoff[key] <= 0:
+            raise ValueError(f"loop.backoff.{key} must be a number > 0")
+    if backoff["max_seconds"] < backoff["base_seconds"]:
+        raise ValueError("loop.backoff.max_seconds must be >= loop.backoff.base_seconds")
+    jitter = backoff.get("jitter")
+    if not _is_number(jitter) or not 0 <= jitter <= 1:
+        raise ValueError("loop.backoff.jitter must be a number between 0 and 1")
+
+    if loop.get("base_branch") is not None and not _is_text(loop["base_branch"]):
+        raise ValueError("loop.base_branch must be null or a non-empty string")
+    for key in ("branch_prefix", "tasks_file", "logs_dir", "claude_bin"):
+        if not _is_text(loop.get(key)):
+            raise ValueError(f"loop.{key} must be a non-empty string")
+    paths = loop.get("protected_paths")
+    if not isinstance(paths, list) or not all(_is_text(item) for item in paths):
+        raise ValueError("loop.protected_paths must be an array of non-empty strings")
+
+    secrets = loop.get("secrets")
+    if not isinstance(secrets, dict):
+        raise ValueError("loop.secrets must be an object")
+    if secrets.get("backend") not in SECRETS_BACKENDS:
+        raise ValueError(f"loop.secrets.backend must be one of: {', '.join(SECRETS_BACKENDS)}")
+    if secrets["backend"] == "command":
+        command = secrets.get("command")
+        if not isinstance(command, list) or not command or not all(_is_text(item) for item in command):
+            raise ValueError("loop.secrets.command must be a non-empty array of non-empty strings")
+        if not any("{name}" in item for item in command):
+            raise ValueError("loop.secrets.command must contain a {name} placeholder")
+
+    notify = loop.get("notify")
+    if not isinstance(notify, dict):
+        raise ValueError("loop.notify must be an object")
+    if not isinstance(notify.get("enabled"), bool):
+        raise ValueError("loop.notify.enabled must be a boolean")
+    for key in ("telegram_token_secret", "telegram_chat_secret"):
+        if not _is_text(notify.get(key)):
+            raise ValueError(f"loop.notify.{key} must be a non-empty string")
+
+
+def validate_loop_mode(cfg: dict[str, Any]) -> list[str]:
+    """Settings that are fine for a plain council run but not for the unattended
+    loop runner. Returns one message per problem (empty list = OK)."""
+    errors: list[str] = []
+    if cfg.get("target_repo") != ".":
+        errors.append(
+            f'target_repo is {cfg.get("target_repo")!r}; loop mode requires "." '
+            "(the project that holds .council/ and tasks/)"
+        )
+    if cfg.get("dry_run") is True:
+        errors.append("dry_run is true; loop mode needs real commits -- set dry_run to false")
+    if cfg.get("auto_commit") is False:
+        errors.append("auto_commit is false; loop mode commits each accepted cycle -- set auto_commit to true")
+    loop = cfg.get("loop")
+    base_branch = loop.get("base_branch") if isinstance(loop, dict) else None
+    if base_branch in PROTECTED_BASE_BRANCHES:
+        errors.append(
+            f"loop.base_branch is {base_branch!r}; loop mode refuses to work on main/master -- "
+            "use a separate base branch"
+        )
+    return errors
 
 
 HISTORY_REQUIRED_KEYS = ("cycle", "ts", "step", "verdict", "commit", "notes")
@@ -224,6 +384,84 @@ def cmd_effective_config(args: argparse.Namespace) -> int:
         print(f"invalid council config: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(config, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_loop_check(args: argparse.Namespace) -> int:
+    """Exit 0 if the effective config is usable for loop mode; otherwise print
+    each problem to stderr and exit 1."""
+    root = Path(args.root).resolve()
+    try:
+        config = load_config(root)
+    except Exception as exc:
+        print(f"invalid council config: {exc}", file=sys.stderr)
+        return 1
+    errors = validate_loop_mode(config)
+    for error in errors:
+        print(f"loop mode: {error}", file=sys.stderr)
+    if errors:
+        return 1
+    print("loop mode: OK")
+    return 0
+
+
+GOAL_STARTED_RE = re.compile(r"^started_at:\s*(\S+)\s*$", re.MULTILINE)
+
+
+def cmd_set_goal(args: argparse.Namespace) -> int:
+    """Shared implementation of /goal's archive-and-reset: move the outgoing run's
+    history/dynamic-agents/transcripts into .council/state/archive/<started_at>/
+    (never delete), write a fresh goal.md, remove stop.flag. Safe to re-run."""
+    if not args.objective.strip():
+        print("set-goal: --objective must not be empty", file=sys.stderr)
+        return 1
+    root = Path(args.root).resolve()
+    state_dir = root / ".council" / "state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    goal_path = state_dir / "goal.md"
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Archive the outgoing run, if there is one with anything to keep.
+    archived: Path | None = None
+    if goal_path.exists():
+        movable = [
+            state_dir / name
+            for name in ("history.jsonl", "dynamic-agents.jsonl", "transcripts")
+            if (state_dir / name).exists()
+        ]
+        if movable:
+            started = None
+            match = GOAL_STARTED_RE.search(goal_path.read_text(encoding="utf-8"))
+            if match:
+                try:
+                    _parse_utc_ts(match.group(1))
+                    started = match.group(1)
+                except ValueError:
+                    pass
+            # ':' is invalid in Windows paths.
+            name = (started or f"unknown-{now}").replace(":", "-")
+            archived = state_dir / "archive" / name
+            suffix = 2
+            while archived.exists():
+                archived = state_dir / "archive" / f"{name}-{suffix}"
+                suffix += 1
+            archived.mkdir(parents=True)
+            for path in movable:
+                shutil.move(str(path), str(archived / path.name))
+
+    # Fresh goal, same layout /goal has always written.
+    acceptance = args.acceptance.strip() or "unspecified — Arbiter should infer reasonable criteria"
+    goal_path.write_text(
+        "# Council Goal\n\n"
+        f"## Objective\n{args.objective.strip()}\n\n"
+        f"## Acceptance criteria\n{acceptance}\n\n"
+        f"started_at: {now}\n",
+        encoding="utf-8",
+    )
+    (state_dir / "stop.flag").unlink(missing_ok=True)
+    print(f"goal set: started_at {now}")
+    if archived:
+        print(f"archived previous run: {archived}")
     return 0
 
 
@@ -587,6 +825,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     init_config = subparsers.add_parser("init-config")
     init_config.set_defaults(func=cmd_init_config)
+
+    loop_check = subparsers.add_parser("loop-check", help="Check the config is usable for loop mode")
+    loop_check.set_defaults(func=cmd_loop_check)
+
+    set_goal = subparsers.add_parser("set-goal", help="Archive the previous run and write a new goal.md")
+    set_goal.add_argument("--objective", required=True)
+    set_goal.add_argument("--acceptance", default="", help="Acceptance criteria (empty = unspecified)")
+    set_goal.set_defaults(func=cmd_set_goal)
 
     count = subparsers.add_parser("history-count")
     count.set_defaults(func=cmd_history_count)
