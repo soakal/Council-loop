@@ -24,10 +24,22 @@ MAIN_BRANCHES = {"main", "master"}
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit"}
 EDIT_TOOLS = WRITE_TOOLS | {"NotebookEdit"}
 FILE_TOOLS = EDIT_TOOLS | {"Read", "Grep", "Glob"}
-CHAIN_OPS = {"&&", "||", ";", "|", "&", "|&", ";;"}
 REDIRECTS = {">", ">>", ">|", "&>", "&>>", ">&"}
-# Leading words that just run the next word as the real command.
-PREFIX_WORDS = {"sudo", "env", "nohup", "time", "command", "exec", "xargs", "nice"}
+# Leading words that just run the next word as the real command, mapped to
+# their options that take a separate value (so the value is skipped too).
+PREFIX_WORDS = {
+    "sudo": {"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U"},
+    "env": {"-u", "-C", "--unset", "--chdir"},
+    "nice": {"-n"},
+    "timeout": {"-s", "-k", "--signal", "--kill-after"},
+    "xargs": {"-I", "-n", "-P", "-d", "-L", "-s", "-E", "-a"},
+    "nohup": set(), "time": set(), "command": set(), "exec": set(),
+    # Shell keywords that start a command inside a compound statement.
+    "do": set(), "then": set(), "else": set(), "elif": set(), "if": set(),
+    "while": set(), "until": set(), "!": set(),
+}
+# git global options that take a separate value before the subcommand.
+GIT_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--super-prefix"}
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 READERS = {
     "cat", "tac", "less", "more", "head", "tail", "type", "get-content", "gc",
@@ -60,8 +72,8 @@ def run_git(args, cwd):
     return r.stdout.strip() if r.returncode == 0 else None
 
 
-def current_branch(cwd):
-    return run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd)
+def current_branch(cwd, global_opts=()):
+    return run_git([*global_opts, "rev-parse", "--abbrev-ref", "HEAD"], cwd)
 
 
 def norm(p):
@@ -76,9 +88,22 @@ def candidate_paths(p, cwd):
     return {norm(p), norm(os.path.realpath(p))}
 
 
+def is_cred_glob(name):
+    """A glob pattern (e.g. .env*, *.env, *.pem) that could match a credential file."""
+    core = re.sub(r"[*?\[\]]", "", name)
+    if core in (".env.example", ".env.sample"):
+        return False
+    return (
+        core.startswith(".env") or core.endswith(".env") or core.endswith(".pem")
+        or ((core.startswith("id_rsa") or core.startswith("id_ed25519")) and not core.endswith(".pub"))
+    )
+
+
 def is_cred_path(path):
     low = path.lower()
     name = low.rsplit("/", 1)[-1]
+    if any(c in name for c in "*?["):
+        return is_cred_glob(name)
     return (
         name == ".env"
         or (name.startswith(".env.") and name not in (".env.example", ".env.sample"))
@@ -102,22 +127,28 @@ def any_path(paths, cwd, test):
 
 def tokenize(line):
     """shlex with shell punctuation split out; plain split if quotes are unbalanced."""
+    line = line.replace("`", " ; ")  # backtick substitution runs its own command
     try:
         lex = shlex.shlex(line, posix=True, punctuation_chars=True)
         lex.whitespace_split = True
         return list(lex)
     except ValueError:
-        spaced = re.sub(r"(&&|\|\||[;|&<>])", r" \1 ", line)
+        spaced = re.sub(r"(&&|\|\||[;|&<>(){}])", r" \1 ", line)
         return [t.strip("'\"") for t in spaced.split()]
 
 
+def is_separator(tok):
+    """Chain operators (&&, ;, |, ...), subshell/group parens and braces, and the $ of $( )."""
+    return tok in ("{", "}", "$") or (tok != "" and set(tok) <= set(";|&()"))
+
+
 def segments(command):
-    """Split a command string on newlines and chain operators into token lists."""
+    """Split a command string on newlines, chain operators and grouping into token lists."""
     out = []
     for line in command.replace("\\\n", " ").splitlines():
         cur = []
         for tok in tokenize(line):
-            if tok in CHAIN_OPS:
+            if is_separator(tok):
                 out.append(cur)
                 cur = []
             else:
@@ -130,11 +161,20 @@ class Seg:
     """One simple command: its name (lowercase, no path/.exe) and its arguments."""
 
     def __init__(self, toks, ctx):
-        stripped = False
-        while toks and (toks[0].lower() in PREFIX_WORDS or re.match(r"^\w+=", toks[0])
-                        or (stripped and toks[0].startswith("-"))):
-            stripped = True
-            toks = toks[1:]
+        i = 0
+        while i < len(toks):
+            word = toks[i].lower()
+            if re.match(r"^\w+=", toks[i]):  # VAR=value assignment
+                i += 1
+            elif word in PREFIX_WORDS:
+                i += 1
+                while i < len(toks) and toks[i].startswith("-") and len(toks[i]) > 1:
+                    i += 2 if toks[i] in PREFIX_WORDS[word] else 1
+                if word == "timeout" and i < len(toks):
+                    i += 1  # the duration
+            else:
+                break
+        toks = toks[i:]
         self.toks = toks
         name = re.split(r"[\\/]", toks[0])[-1].lower() if toks else ""
         self.cmd = name[:-4] if name.endswith(".exe") else name
@@ -158,26 +198,25 @@ class Seg:
         return [self.args[i + 1] for i, a in enumerate(self.args[:-1]) if a in REDIRECTS]
 
     def git(self):
-        """(subcommand, args after it, directory git runs in) for a git command."""
+        """(subcommand, args after it, global options before it) for a git command."""
         if self.cmd != "git":
-            return None, [], None
-        cwd, i = self.ctx["cwd"], 0
+            return None, [], []
+        i = 0
         while i < len(self.args):
             a = self.args[i]
-            if a == "-C" and i + 1 < len(self.args):
-                cwd = os.path.join(cwd or os.getcwd(), self.args[i + 1])
-                i += 2
-            elif a == "-c":
+            if a in GIT_VALUE_OPTS:
                 i += 2
             elif a.startswith("-"):
                 i += 1
             else:
-                return a, self.args[i + 1:], cwd
-        return None, [], cwd
+                return a, self.args[i + 1:], self.args[:i]
+        return None, [], self.args
 
 
 def inner_command(seg):
-    """The script passed to bash -c / cmd /c / powershell -Command, if any."""
+    """The script passed to eval / bash -c / cmd /c / powershell -Command, if any."""
+    if seg.cmd == "eval":
+        return " ".join(seg.args)
     if seg.cmd in SHELLS:
         for i, a in enumerate(seg.args[:-1]):
             if re.fullmatch(r"-[a-z]*c[a-z]*", a):
@@ -245,7 +284,7 @@ def rule_push_force(s):
 
 
 def rule_push_main(s):
-    sub, args, cwd = s.git()
+    sub, args, gopts = s.git()
     if sub != "push":
         return False
     flags, pos = push_parts(args)
@@ -262,14 +301,15 @@ def rule_push_main(s):
         return False
     if not refspecs or any(r.lstrip("+") == "HEAD" for r in refspecs):
         # Pushes the current branch: deny if it is main/master, or if git can't tell (fail closed).
-        branch = current_branch(cwd)
+        branch = current_branch(s.ctx["cwd"], gopts)
         return branch is None or branch in MAIN_BRANCHES
     return False
 
 
 def rule_git_on_main(s):
-    sub, _, cwd = s.git()
-    return sub in ("merge", "rebase", "cherry-pick", "commit") and current_branch(cwd) in MAIN_BRANCHES
+    sub, _, gopts = s.git()
+    return (sub in ("merge", "rebase", "cherry-pick", "commit")
+            and current_branch(s.ctx["cwd"], gopts) in MAIN_BRANCHES)
 
 
 def rule_disk(s):
@@ -422,7 +462,7 @@ def main(argv):
     strict = loop_run or "--strict" in argv[1:]
     try:
         reason = evaluate(json.loads(sys.stdin.read()), strict, loop_run)
-    except (ValueError, TypeError, AttributeError) as exc:
+    except Exception as exc:  # any error fails closed
         reason = f"guard.py could not parse the hook payload ({exc}); denying (fails closed)."
     if reason:
         print(json.dumps({"hookSpecificOutput": {

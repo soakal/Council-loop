@@ -1,4 +1,7 @@
 """Tests for scripts/hooks/guard.py, run as a subprocess exactly as Claude Code runs it."""
+import contextlib
+import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -6,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 GUARD = Path(__file__).resolve().parents[1] / "scripts" / "hooks" / "guard.py"
 
@@ -201,6 +205,62 @@ class GuardTest(unittest.TestCase):
                     "echo a\nrm -rf x", "bash -c 'rm -rf x'", "echo 'unbalanced && rm -rf x"]:
             self.assertTrue(self.bash(cmd), cmd)
         self.assertFalse(self.bash('echo "rm -rf x; git push --force"'))
+
+    # --- review findings (Fable, T1) ---
+    def test_compound_statements_and_substitution(self):
+        for cmd in ["for d in a b; do rm -rf $d; done", "if true; then rm -rf x; fi", "(rm -rf x)",
+                    "{ rm -rf x; }", "! rm -rf x", "echo $(cat .env)", "echo `cat .env`",
+                    "if false; then :; else rm -rf x; fi", "while true; do mkfs.ext4 /dev/x; done"]:
+            self.assertTrue(self.bash(cmd), cmd)
+        self.assertFalse(self.bash("for f in a b; do echo $f; done"))
+        self.assertFalse(self.bash("echo $(date)"))
+
+    def test_credential_globs(self):
+        for cmd in ["cat .env*", "cat *.env", "cat certs/*.pem", "cat ~/.ssh/id_rsa*"]:
+            self.assertTrue(self.bash(cmd), cmd)
+        self.assertTrue(self.tool("Glob", pattern="**/.env*"))
+        self.assertTrue(self.tool("Grep", pattern="KEY", glob="*.env"))
+        self.assertFalse(self.bash("cat *.py"))
+        self.assertFalse(self.bash("cat .env.example*"))
+        self.assertFalse(self.tool("Glob", pattern="**/.env.sample"))
+        self.assertFalse(self.tool("Grep", pattern="KEY", glob="*.py"))
+
+    def test_prefixes_and_eval(self):
+        for cmd in ["timeout 10 rm -rf x", "timeout -s KILL 5 git push --force", "nice -n 5 rm -rf x",
+                    "nohup rm -rf x", "sudo -u root rm -rf x", 'eval "rm -rf x"', "eval cat .env"]:
+            self.assertTrue(self.bash(cmd), cmd)
+        self.assertFalse(self.bash("timeout 10 ls"))
+        self.assertFalse(self.bash('eval "echo hi"'))
+
+    def test_git_global_options_before_push(self):
+        for cmd in ["git --git-dir .git push origin main", "git -C repo push --force",
+                    "git --work-tree . -c a=b push origin HEAD:master", "git --no-pager push -f origin feat"]:
+            self.assertTrue(self.bash(cmd), cmd)
+        self.assertFalse(self.bash("git -C repo push origin feat"))
+
+    def test_bare_push_with_C_uses_that_repo(self):
+        self.repo_on("main")
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        self.assertTrue(self.bash(f"git -C {self.dir} push", cwd=outside.name))
+        git(self.dir, "checkout", "-q", "-b", "feature")
+        self.assertFalse(self.bash(f"git -C {self.dir} push", cwd=outside.name))
+
+    def test_any_internal_error_fails_closed(self):
+        spec = importlib.util.spec_from_file_location("guard_under_test", GUARD)
+        guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guard)
+
+        def boom(*_a, **_k):
+            raise RuntimeError("unexpected")
+
+        guard.evaluate = boom
+        out = io.StringIO()
+        with mock.patch("sys.stdin", io.StringIO('{"tool_name": "Bash", "tool_input": {"command": "ls"}}')), \
+                contextlib.redirect_stdout(out):
+            self.assertEqual(guard.main(["guard.py", "--strict"]), 0)
+        decision = json.loads(out.getvalue())["hookSpecificOutput"]
+        self.assertEqual(decision["permissionDecision"], "deny")
 
 
 if __name__ == "__main__":
