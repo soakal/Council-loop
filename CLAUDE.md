@@ -96,7 +96,7 @@ templates) if it doesn't already exist.
 - `.council/state/goal.md` — current objective + acceptance criteria + `started_at` (runtime, gitignored).
 - `.council/state/history.jsonl` — one line per cycle (runtime, gitignored).
 - `.council/state/transcripts/` — optional readable cycle transcripts (runtime, gitignored).
-- `.council/state/stop.flag` — presence halts `/loop`; contents = reason (runtime, gitignored).
+- `.council/state/stop.flag` — presence halts `/loop`; contents = reason (runtime, gitignored). The runner (`scripts/loop_runner.py`) gates `goal complete` and `max_cycles reached`/`max_minutes reached`; anything else, including the Arbiter's `blocked: <reason>` (needs the owner), marks the task `blocked`.
 - `.council/state/cycle.lock` — held for the duration of one cycle (`begin-cycle`/`end-cycle`); a lock older than an hour is treated as crashed-process debris and reclaimed automatically (runtime, gitignored).
 - `.council/state/archive/<started_at>/` — prior runs' `history.jsonl`/`dynamic-agents.jsonl`/`transcripts/`, moved here by `/goal` instead of being deleted (runtime, gitignored).
 
@@ -136,6 +136,7 @@ script under `scripts/hooks/` rather than an inline command, so they're directly
 - **`target_repo`** is where all edits and commits land. `"."` means the active project — wherever `.council/` was bootstrapped, i.e. wherever you're actually running the council from — and is the normal case; point it at another repo's absolute path only when you want to drive a *different* project's changes from here.
 - **Ceiling replaces the old cost cap:** the cycle stops at `max_cycles` OR `max_minutes`, whichever comes first — this is the subscription-model equivalent of the PowerShell dollar ceiling.
 - **Pre-run guards:** `target_repo` must be a git repository. On **every** cycle (not just the first), TARGET's working tree must be clean before the Arbiter plans — or, under `auto_commit:false`, contain only the fully-staged, not-yet-committed result of the prior cycle's ACCEPT; anything else (the user's own uncommitted work, orphaned residue from a crashed prior cycle) writes `stop.flag` rather than silently building on top of it. Either guard failing writes `stop.flag`. The commit step (§5) is a second, narrower layer of the same protection: it only ever stages the exact paths the Engineer/Security/Verifier reported that cycle — never `git add -A` — so even if something unexpected slips past the pre-run guard mid-cycle, it still can't get swept into the commit.
+- **Never ask when headless.** Under `COUNCIL_LOOP_RUN=1` or any non-interactive session the council never asks a question; the Arbiter returns `BLOCKED: <reason>` and the cycle writes `stop.flag` = `blocked: <reason>`.
 - **One step per cycle.** The Engineer must not scope-creep; the Realist defaults to `REVISE` when unsure.
 - **Coverage is the Verifier's job, not the Engineer's.** The Engineer implements the step;
   the Verifier adds the regression test in the same cycle. Don't plan separate "add a test
