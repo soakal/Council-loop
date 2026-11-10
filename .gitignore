@@ -25,3 +25,6 @@ tasks/*
 !tasks/.gitkeep
 logs/*
 !logs/usage.md
+
+# Agent worktrees created by Claude Code subagents
+.claude/worktrees/
