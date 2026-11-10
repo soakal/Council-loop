@@ -58,7 +58,7 @@ that it is done; the runner's checks do.
 
 Run `./loop ...` (Linux/macOS) or `loop.cmd ...` (Windows) from a clone of this repo, or
 call `python3 scripts/loop.py ...` directly. Use `--project DIR` to point at a project other
-than the current directory. Every command has `--help`. The test suite is verified on Windows 11 (Tiny11) at commit WINDOWS_SHA (see `reviews/windows-tiny11.txt`).
+than the current directory. Every command has `--help`. The test suite is verified on Windows 11 (Tiny11) at commit a44b146 (see `reviews/windows-tiny11.txt`).
 
 ### 5-minute quickstart
 

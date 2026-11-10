@@ -182,7 +182,7 @@ logs note` (`--project DIR`, default cwd). Python 3.9+, stdlib only, Linux and W
   `loop.secrets` (`command`/`env`/`infisical`) once at run start (so it is masked before any
   session output is written; failure logs `notify key_unavailable` and the run continues). HTTP
   redirects are never followed. Failures are logged as `[undelivered]`, never fatal.
-- **Windows:** the suite passed on Windows 11 (Tiny11) at commit WINDOWS_SHA (see `reviews/windows-tiny11.txt`).
+- **Windows:** the suite passed on Windows 11 (Tiny11) at commit a44b146 (see `reviews/windows-tiny11.txt`).
 
 ## Brain event loopback (best-effort, end of a `loop run`)
 
