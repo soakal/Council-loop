@@ -196,6 +196,16 @@ class GuardTest(unittest.TestCase):
         self.assertFalse(self.tool("Edit", file_path="tasks/tasks.json", new_string="x"))
         self.assertFalse(self.bash("echo x > tasks/tasks.json"))
 
+    def test_loop_cli_writes_denied_in_loop_run(self):
+        for cmd in ["loop resume --approve-tests t1 --reason ok", "./loop add x --allow-test-changes",
+                    "loop.cmd resume --unblock t1", "python3 scripts/loop.py resume --retry-failed",
+                    "env -u COUNCIL_LOOP_RUN python3 /x/scripts/loop.py --project . note t1 hi",
+                    "py -3 C:/p/scripts/loop.py init", "bash -c 'loop run --once'", "/opt/cl/loop.py add y"]:
+            self.assertTrue(self.bash(cmd, loop_run=True), cmd)
+        for cmd in ["loop status --json", "./loop logs -n 5", "python3 scripts/loop.py status", "python3 x.py run"]:
+            self.assertFalse(self.bash(cmd, loop_run=True), cmd)
+        self.assertFalse(self.bash("loop resume --unblock t1"))  # owner session (strict only): allowed
+
     def test_env_var_alone_enables_strict(self):
         self.assertTrue(self.bash("rm -rf x", strict=False, loop_run=True))
 

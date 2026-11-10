@@ -18,3 +18,5 @@ One line per item. Nothing here gets built without a new approved plan.
 - Gate: a model committing directly to base / rebasing can hide a test edit from the merge-base diff (tripwire limit, §9).
 - Runner: Brain event / post-mortem read only the current `history.jsonl`, but `set-goal` archives it at each attempt, so a multi-attempt run reports only its last attempt.
 - CLI: `loop resume --retry-failed/--unblock` does not re-queue dependents that block_unreachable marked blocked ("dependency X"); they need their own `--unblock`.
+- Direct `python -c`/script edits to other tasks' entries in tasks.json remain tripwire-only (§9).
+- tests/test_verify.py test_timeout_kills_child_tree: exists()-then-read_text() race on /proc/<pid>/stat gives a rare FileNotFoundError (flaky, seen 2026-11-09 during T8 review fixes).

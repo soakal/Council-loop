@@ -50,7 +50,8 @@ class CliTests(unittest.TestCase):
         # Keep end-of-run hooks inert: no NEXUS key in env or in a (temp) home folder.
         home = Path(tmp.name) / "home"
         home.mkdir()
-        self.env = {k: v for k, v in os.environ.items() if k not in ("NEXUS_API_KEY", "NEXUS_BASE_URL")}
+        self.env = {k: v for k, v in os.environ.items()
+                    if k not in ("NEXUS_API_KEY", "NEXUS_BASE_URL", "COUNCIL_LOOP_RUN")}
         self.env.update(HOME=str(home), USERPROFILE=str(home))
         self.tmp = Path(tmp.name)
 
@@ -137,6 +138,8 @@ class CliTests(unittest.TestCase):
         t = s.load()[0]
         self.assertEqual(t["status"], "pending")
         self.assertIsNone(t["escalated_at"])
+        self.assertIn("already pending", self.loop("resume", "--unblock", "t001", "--no-run").stdout)
+        s.update("t001", status="claimed")
         again = self.loop("resume", "--unblock", "t001", "--no-run", ok=False)
         self.assertIn("not blocked", again.stderr)
 
@@ -206,6 +209,35 @@ class CliTests(unittest.TestCase):
         self.loop("note", "t001", "hello")
         self.assertEqual(self.store().load()[0]["notes"][-1]["text"], "hello")
         self.assertEqual(self.loop("note", "zzz", "hi", ok=False).returncode, 1)
+
+    def test_loop_session_cannot_change_state(self):
+        self.loop("init")
+        self.loop("add", "x")
+        s = self.store()
+        s.claim("r1")
+        s.update("t001", status="blocked", reason="test change needs review")
+        self.env["COUNCIL_LOOP_RUN"] = "1"
+        for cmd in (["resume", "--approve-tests", "t001", "--reason", "looks fine", "--no-run"],
+                    ["resume", "--unblock", "t001", "--no-run"], ["add", "y", "--allow-test-changes"],
+                    ["note", "t001", "hi"], ["init"], ["run", "--once"]):
+            proc = self.loop(*cmd, ok=False)
+            self.assertEqual(proc.returncode, 2, cmd)
+            self.assertIn("owner-only", proc.stderr)
+        self.assertEqual([t["status"] for t in s.load()], ["blocked"])
+        self.assertEqual(self.status()["counts"]["blocked"], 1)  # read-only commands still work
+        self.loop("logs")
+        self.loop("resume", "--help")
+
+    def test_unblock_pending_is_noop(self):
+        self.loop("init")
+        self.loop("add", "x")
+        self.assertIn("already pending", self.loop("resume", "--unblock", "t001", "--no-run").stdout)
+
+    def test_reset_attempts_needs_retry_failed(self):
+        self.loop("init")
+        proc = self.loop("resume", "--reset-attempts", "--no-run", ok=False)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("--retry-failed", proc.stderr)
 
 
 if __name__ == "__main__":

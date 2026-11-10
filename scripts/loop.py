@@ -11,6 +11,7 @@ import argparse
 import contextlib
 import io
 import json
+import os
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -145,6 +146,7 @@ def _status(project: Path) -> dict:
     loop = cfg["loop"]
     tasks = _store(project, cfg).load()
     counts = {s: sum(t["status"] == s for t in tasks) for s in ("pending", "claimed", "done", "failed", "blocked")}
+    # Probe: we hold run.lock for an instant, so a `loop run` starting right now may be refused once.
     lock = try_lock(project / loop_runner.STATE / "run.lock")
     if lock is not None:
         unlock(lock)
@@ -197,6 +199,9 @@ def cmd_resume(args) -> int:
     store = _store(project, cfg)
     by_id = {t["id"]: t for t in store.load()}
     for tid in args.unblock:
+        if by_id.get(tid, {}).get("status") == "pending":
+            print(f"{tid}: already pending -- nothing to unblock")
+            continue
         if by_id.get(tid, {}).get("status") != "blocked":
             raise CliError(f"task {tid!r} is not blocked ({by_id.get(tid, {}).get('status', 'unknown')})")
         store.update(tid, status="pending", reason=None, escalated_at=None)
@@ -321,8 +326,18 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+# Read-only commands a loop session itself may use; everything else is owner-only.
+LOOP_SESSION_OK = ("status", "logs")
+
+
 def main(argv=None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)  # --help exits here, so it always works
+    if args.cmd == "resume" and args.reset_attempts and not args.retry_failed:
+        parser.error("--reset-attempts only works with --retry-failed")
+    if os.environ.get("COUNCIL_LOOP_RUN") == "1" and args.cmd not in LOOP_SESSION_OK:
+        print("loop: loop state changes are owner-only; not allowed inside a loop session", file=sys.stderr)
+        return 2
     args.project = args.project.resolve()
     try:
         return args.func(args)
