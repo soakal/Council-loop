@@ -474,4 +474,23 @@ fi
 
 (cd "$repo_root" && python3 -m unittest discover -s tests)
 
+# README must document every loop subcommand and every loop.* config key (docs match code).
+python3 - "$repo_root" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/scripts")
+from pathlib import Path
+from council_state import DEFAULT_LOOP
+
+readme = (Path(sys.argv[1]) / "README.md").read_text(encoding="utf-8")
+missing = [f"loop {c}" for c in ("init", "add", "run", "status", "resume", "logs", "note")
+           if f"loop {c}" not in readme]
+missing += [f"loop.{k}" for k in DEFAULT_LOOP if f"loop.{k}" not in readme]
+for k, v in DEFAULT_LOOP.items():
+    if isinstance(v, dict):
+        missing += [f"loop.{k}.{s}" for s in v if f"loop.{k}.{s}" not in readme]
+if missing:
+    print("README.md is missing: " + ", ".join(missing), file=sys.stderr)
+    sys.exit(1)
+PY
+
 echo "Validation passed."
