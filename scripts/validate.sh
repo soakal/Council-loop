@@ -40,6 +40,7 @@ required_files=(
   "$repo_root/set-target.sh"
   "$repo_root/run-loop.ps1"
   "$repo_root/run-loop.sh"
+  "$repo_root/tests/test_e2e.py"
 )
 
 for path in "${required_files[@]}"; do
@@ -462,5 +463,7 @@ PS1
 else
   echo "WARNING: no pwsh/powershell available in this validate.sh context -- skipping .ps1 parse checks" >&2
 fi
+
+(cd "$repo_root" && python3 -m unittest discover -s tests)
 
 echo "Validation passed."
