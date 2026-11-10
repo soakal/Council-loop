@@ -176,6 +176,7 @@ class CliTests(unittest.TestCase):
         cfg_path = self.repo / ".council" / "config.json"
         cfg = json.loads(cfg_path.read_text())
         cfg["loop"]["claude_bin"] = str(bin_path)
+        cfg["loop"]["secrets"] = {"backend": "env"}  # end-of-run post-mortem must not call the real `secret` CLI
         cfg_path.write_text(json.dumps(cfg))
         self.loop("add", "Add a", "--verify", f'{PY} -c "pass"')
         proc = self.loop("run", "--once")

@@ -828,7 +828,7 @@ class Runner:
         tid = task["id"] if task else "-"
         try:
             loop_notify.send_escalation(self.loop, event, f"{event}: task {tid}: {reason.splitlines()[0] if reason else ''}",
-                                        reason)
+                                        reason, task["id"] if task else None)
         except Exception as exc:  # no key, network down, non-2xx: file log only, keep running
             why = redact(str(exc))[:300]
             with (self.logs_dir / "escalations.md").open("a", encoding="utf-8") as fh:

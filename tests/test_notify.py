@@ -18,6 +18,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import council_state  # noqa: E402
 import loop  # noqa: E402
 import loop_log  # noqa: E402
 import loop_notify  # noqa: E402
@@ -32,7 +33,7 @@ MISSING_CMD = ["{python}", "-c", "import sys; sys.exit(1)", "{name}"]
 class FakeNexus:
     """Records every POST; answers with `status`."""
 
-    def __init__(self, status=201):
+    def __init__(self, status=201, reply=b'{"id": 1}'):
         self.requests = []
         outer = self
 
@@ -44,7 +45,7 @@ class FakeNexus:
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(b'{"id": 1}')
+                self.wfile.write(reply)
 
             def log_message(self, *a):
                 pass
@@ -111,6 +112,15 @@ class SecretsTests(unittest.TestCase):
             os.environ.pop("NEXUS_BASE_URL", None)
             self.assertEqual(loop_notify.nexus_url({"nexus_url": ""}), "http://127.0.0.1:8000")
 
+    def test_api_key_secret_must_be_a_name(self):
+        for bad in ("", "1KEY", "NEXUS KEY", "x;rm", "a-b"):
+            loop_cfg = json.loads(json.dumps(council_state.DEFAULT_LOOP))
+            loop_cfg["notify"]["api_key_secret"] = bad
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "api_key_secret"):
+                council_state.validate_loop_block(loop_cfg)
+        loop_cfg["notify"]["api_key_secret"] = "_NEXUS_API_KEY2"
+        council_state.validate_loop_block(loop_cfg)
+
     def test_disabled_sends_nothing(self):
         self.assertFalse(loop_notify.send_escalation(
             {"notify": {"enabled": False}, "secrets": {"backend": "command", "command": MISSING_CMD}},
@@ -157,7 +167,7 @@ class EscalationRunTests(unittest.TestCase):
         self.assertEqual(req["auth"], f"Bearer {TOKEN}")
         body = req["json"]
         self.assertEqual((body["source"], body["check"], body["severity"], body["page_now"]),
-                         ("council_loop", "blocked", "high", True))
+                         ("council_loop", "blocked:t001", "high", True))
         self.assertIn("t001", body["summary"])
         self.assertNotIn("\n", body["summary"])
         self.assertIn("needs an API key", body["detail"])
@@ -186,6 +196,30 @@ class EscalationRunTests(unittest.TestCase):
 
     def test_server_down_writes_file_and_continues(self):
         self.configure(dead_url(), GOOD_CMD)
+        _, res = self.blocked_run()
+        self.assert_undelivered(res)
+
+    def test_each_task_gets_its_own_check(self):
+        nexus = FakeNexus()
+        self.addCleanup(nexus.close)
+        self.configure(nexus.url, GOOD_CMD)
+        r, _ = self.blocked_run()
+        self.store.add("Other", verify=[tr.PASS])
+        r.escalate("blocked", self.task("t002"), "also blocked")
+        self.assertEqual([q["json"]["check"] for q in nexus.requests], ["blocked:t001", "blocked:t002"])
+
+    def test_null_id_is_undelivered(self):
+        for reply in (b'{"id": null}', b"not json"):
+            with self.subTest(reply=reply):
+                nexus = FakeNexus(status=200, reply=reply)
+                self.addCleanup(nexus.close)
+                with self.assertRaisesRegex(loop_notify.NotifyError, "did not page"):
+                    loop_notify.send_escalation(
+                        {"notify": {"enabled": True, "nexus_url": nexus.url, "api_key_secret": "K"},
+                         "secrets": {"backend": "command", "command": GOOD_CMD}}, "blocked", "s", "d", "t001")
+        nexus = FakeNexus(status=200, reply=b'{"id": null}')
+        self.addCleanup(nexus.close)
+        self.configure(nexus.url, GOOD_CMD)
         _, res = self.blocked_run()
         self.assert_undelivered(res)
 

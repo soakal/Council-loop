@@ -352,8 +352,9 @@ def validate_loop_block(loop: Any) -> None:
     url = notify.get("nexus_url")
     if not isinstance(url, str) or (url and not url.startswith(("http://", "https://"))):
         raise ValueError('loop.notify.nexus_url must be "" or an http(s):// URL')
-    if not _is_text(notify.get("api_key_secret")):
-        raise ValueError("loop.notify.api_key_secret must be a non-empty string")
+    key_name = notify.get("api_key_secret")
+    if not isinstance(key_name, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key_name):
+        raise ValueError("loop.notify.api_key_secret must be a secret name like NEXUS_API_KEY")
 
 
 def validate_loop_mode(cfg: dict[str, Any]) -> list[str]:

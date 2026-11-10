@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -79,15 +80,19 @@ def nexus_url(notify_cfg: dict) -> str:
     return (notify_cfg.get("nexus_url") or os.environ.get("NEXUS_BASE_URL") or DEFAULT_NEXUS_URL).rstrip("/")
 
 
-def send_escalation(loop_cfg: dict, event: str, summary: str, detail: str) -> bool:
-    """Post one flag to NEXUS. False when notify is disabled; True when delivered; NotifyError otherwise."""
+def send_escalation(loop_cfg: dict, event: str, summary: str, detail: str, task_id: str | None = None) -> bool:
+    """Post one flag to NEXUS. False when notify is disabled; True when paged; NotifyError otherwise.
+
+    `check` carries the task id: NEXUS dedupes on source:check, so one deferred flag
+    must not mute every later task's escalation.
+    """
     notify = loop_cfg["notify"]
     if not notify.get("enabled"):
         return False
     key = get_secret(notify.get("api_key_secret") or "NEXUS_API_KEY", loop_cfg["secrets"])
     body = {
         "source": SOURCE,
-        "check": event,
+        "check": re.sub(r"[^A-Za-z0-9_.:-]", "_", f"{event}:{task_id or '-'}")[:64],
         "summary": " ".join(redact(summary).split())[:200],  # one short line
         "detail": redact(detail)[:2000],
         "severity": "high",
@@ -100,8 +105,16 @@ def send_escalation(loop_cfg: dict, event: str, summary: str, detail: str) -> bo
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             if not 200 <= resp.status < 300:
                 raise NotifyError(f"NEXUS answered HTTP {resp.status}")
+            raw = resp.read()
     except urllib.error.HTTPError as exc:  # non-2xx
         raise NotifyError(f"NEXUS answered HTTP {exc.code}") from None
     except (urllib.error.URLError, OSError) as exc:  # refused, DNS, timeout
         raise NotifyError(f"NEXUS unreachable: {redact(str(getattr(exc, 'reason', exc)))}") from None
+    # NEXUS answers 200 {"id": null} when the flag was deferred/cooled down/disabled: no page sent.
+    try:
+        flag_id = json.loads(raw).get("id")
+    except (ValueError, AttributeError):
+        flag_id = None
+    if flag_id is None:
+        raise NotifyError("NEXUS accepted but did not page")
     return True
