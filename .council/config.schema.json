@@ -74,6 +74,63 @@
         "max_test_files": { "type": "integer", "minimum": 1 }
       }
     },
+    "loop": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Settings for the unattended loop runner (loop mode). Optional; every key has a default injected when omitted. Loop mode also requires target_repo '.', dry_run false, auto_commit true, and a base_branch other than main/master (see council_state.py loop-check).",
+      "properties": {
+        "max_attempts": { "type": "integer", "minimum": 1, "description": "Attempts per task before it is marked failed." },
+        "max_sessions": { "type": "integer", "minimum": 1, "description": "Claude sessions per run." },
+        "max_hours": { "type": "number", "exclusiveMinimum": 0, "description": "Wall-clock hours per run." },
+        "session_timeout_minutes": { "type": "integer", "minimum": 1 },
+        "verify_timeout_minutes": { "type": "integer", "minimum": 1 },
+        "backoff": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Retry delay for rate-limit/API errors: base_seconds x 2^n, capped at max_seconds, +/- jitter fraction.",
+          "properties": {
+            "base_seconds": { "type": "number", "exclusiveMinimum": 0 },
+            "max_seconds": { "type": "number", "exclusiveMinimum": 0 },
+            "jitter": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "base_branch": { "type": ["string", "null"], "minLength": 1, "description": "Branch task branches are cut from and merged into. Set by 'loop init'; main/master are refused." },
+        "branch_prefix": { "type": "string", "minLength": 1 },
+        "tasks_file": { "type": "string", "minLength": 1, "description": "Task list path, relative to the project." },
+        "logs_dir": { "type": "string", "minLength": 1, "description": "Log directory, relative to the project." },
+        "log_max_bytes": { "type": "integer", "minimum": 1 },
+        "log_backups": { "type": "integer", "minimum": 1 },
+        "session_logs_keep": { "type": "integer", "minimum": 1 },
+        "claude_bin": { "type": "string", "minLength": 1 },
+        "protected_paths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Globs for existing test files/config; modifying or deleting one blocks the task until approved."
+        },
+        "secrets": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "backend": { "enum": ["command", "env", "infisical"] },
+            "command": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 },
+              "description": "For backend 'command': argv template; '{name}' is replaced by the secret name, '{python}' by the running Python interpreter, and the value is read from stdout (never passed via argv)."
+            }
+          }
+        },
+        "notify": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "telegram_token_secret": { "type": "string", "minLength": 1, "description": "Secret NAME (not value) of the Telegram bot token." },
+            "telegram_chat_secret": { "type": "string", "minLength": 1, "description": "Secret NAME (not value) of the owner's Telegram chat id." }
+          }
+        }
+      }
+    },
     "brain_events": {
       "type": "object",
       "additionalProperties": false,
