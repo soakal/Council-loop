@@ -36,6 +36,16 @@ HTTP_TIMEOUT = 10
 SOURCE = "council_loop"  # valid NEXUS flag source (not reserved, matches its safe-source pattern)
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse every redirect: a 3xx surfaces as HTTPError instead of re-sending the Bearer key elsewhere."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 class NotifyError(RuntimeError):
     """A secret could not be fetched or the escalation could not be delivered."""
 
@@ -102,7 +112,7 @@ def send_escalation(loop_cfg: dict, event: str, summary: str, detail: str, task_
         nexus_url(notify) + "/api/safety/flags", data=json.dumps(body).encode("utf-8"), method="POST",
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
     try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+        with OPENER.open(req, timeout=HTTP_TIMEOUT) as resp:
             if not 200 <= resp.status < 300:
                 raise NotifyError(f"NEXUS answered HTTP {resp.status}")
             raw = resp.read()

@@ -33,7 +33,7 @@ MISSING_CMD = ["{python}", "-c", "import sys; sys.exit(1)", "{name}"]
 class FakeNexus:
     """Records every POST; answers with `status`."""
 
-    def __init__(self, status=201, reply=b'{"id": 1}'):
+    def __init__(self, status=201, reply=b'{"id": 1}', redirect=None):
         self.requests = []
         outer = self
 
@@ -42,10 +42,20 @@ class FakeNexus:
                 body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
                 outer.requests.append({"path": self.path, "auth": self.headers.get("Authorization"),
                                        "json": json.loads(body)})
+                if redirect:  # 302 to another server, same path
+                    self.send_response(302)
+                    self.send_header("Location", redirect + self.path)
+                    self.end_headers()
+                    return
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(reply)
+
+            def do_GET(self):  # a followed redirect arrives as GET: record it too
+                outer.requests.append({"path": self.path, "auth": self.headers.get("Authorization"), "json": None})
+                self.send_response(404)
+                self.end_headers()
 
             def log_message(self, *a):
                 pass
@@ -230,6 +240,60 @@ class EscalationRunTests(unittest.TestCase):
         _, res = self.blocked_run()
         self.assertEqual(len(nexus.requests), 1)
         self.assert_undelivered(res)
+
+    # ---------- T12b: startup-config key/URL, no redirects, early masking ----------
+
+    def test_postmortem_uses_startup_key_and_url_not_rewritten_config(self):
+        nexus = FakeNexus()
+        self.addCleanup(nexus.close)
+        self.configure(nexus.url, GOOD_CMD)
+        r, _ = self.blocked_run()
+        # A session rewrites the config after start: a marker-writing secrets command + a dead URL.
+        marker = self.fake_dir / "marker.txt"
+        (self.repo / ".council" / "config.local.json").write_text(json.dumps({"loop": {
+            "secrets": {"command": ["{python}", "-c", f"open({str(marker)!r}, 'w').write('x'); print('k')", "{name}"]},
+            "notify": {"nexus_url": dead_url()}}}))
+        r._end_of_run("2000-01-01T00:00:00Z")
+        self.assertFalse(marker.exists())
+        trig = [q for q in nexus.requests if q["path"] == "/api/trigger"]
+        self.assertEqual(len(trig), 1, nexus.requests)
+        self.assertEqual(trig[0]["auth"], f"Bearer {TOKEN}")
+
+    def test_redirect_is_not_followed_by_escalation_or_postmortem(self):
+        evil = FakeNexus()
+        self.addCleanup(evil.close)
+        hop = FakeNexus(redirect=evil.url)
+        self.addCleanup(hop.close)
+        loop_cfg = {"notify": {"enabled": True, "nexus_url": hop.url, "api_key_secret": "NEXUS_API_KEY"},
+                    "secrets": {"backend": "command", "command": GOOD_CMD}}
+        with self.assertRaisesRegex(loop_notify.NotifyError, "HTTP 302"):
+            loop_notify.send_escalation(loop_cfg, "blocked", "s", "d", "t001")
+        self.configure(hop.url, GOOD_CMD)
+        r, res = self.blocked_run()
+        self.assert_undelivered(res)
+        with mock.patch.object(r, "_safe_ev") as ev:  # the run's log is closed by now: catch the event
+            r._end_of_run("2000-01-01T00:00:00Z")
+        self.assertIn("/api/trigger", [q["path"] for q in hop.requests])
+        self.assertEqual(evil.requests, [])
+        self.assertIn("skipped: request failed: HTTP Error 302", ev.call_args.kwargs["reason"])
+
+    def test_key_masked_before_session_output_is_persisted(self):
+        self.configure(dead_url(), GOOD_CMD)
+        leak = f"{tr.PY} -c \"import sys; print('nexus-test-' + 'Zq7Xw2Lp9Rt4Vb8N'); sys.exit(1)\""
+        self.store.add("Leaky check", verify=[leak])
+        self.scenario(tr.GOAL_DONE)
+        # Earlier tests registered TOKEN process-wide; start this run with it unknown.
+        mock.patch.object(loop_log, "_SECRETS", set()).start()
+        self.addCleanup(mock.patch.stopall)
+        self.runner().run()
+        self.assertNotIn(TOKEN, self.logs_text())
+        self.assertNotIn(TOKEN, (self.repo / "tasks" / "tasks.json").read_text())
+
+    def test_key_unavailable_at_start_is_logged_and_run_continues(self):
+        self.configure(dead_url(), MISSING_CMD)
+        _, res = self.blocked_run()
+        self.assertEqual(res["exit_code"], 0)
+        self.assertIn('"key_unavailable"', (self.repo / "logs" / "loop.jsonl").read_text())
 
 
 if __name__ == "__main__":

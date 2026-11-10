@@ -787,8 +787,8 @@ class Runner:
 
     def _ev(self, event: str, task_id=None, outcome=None, **extra) -> None:
         self.log.event(event, run_id=self.run_id, task_id=task_id, outcome=outcome, **extra)
-        print(f"[loop] {event} {task_id or '-'} {outcome or ''} {extra.get('reason') or ''}".rstrip(),
-              flush=True)
+        print(redact(f"[loop] {event} {task_id or '-'} {outcome or ''} {extra.get('reason') or ''}".rstrip()),
+              flush=True)  # console gets the same masking as loop.jsonl
 
     def _task(self, task_id: str) -> dict:
         return next(t for t in self.store.load() if t["id"] == task_id)
@@ -972,6 +972,12 @@ class Runner:
             old_term = signal.signal(signal.SIGTERM, _sigterm_to_exit)
         try:
             self._ev("run", None, "start", max_sessions=self.max_sessions, max_hours=hours)
+            if loop["notify"].get("enabled"):
+                # Fetch the NEXUS key once, before any session runs, so it is masked in everything persisted.
+                try:
+                    loop_notify.get_secret(loop["notify"].get("api_key_secret") or "NEXUS_API_KEY", loop["secrets"])
+                except Exception as exc:  # never refuse to run; escalations fall back to escalations.md
+                    self._ev("notify", None, "key_unavailable", reason=redact(str(exc))[:300])
             self._recover(cfg)
             while stop is None:
                 if self._left() <= 0:
@@ -1193,8 +1199,16 @@ class Runner:
         except Exception as exc:
             self._safe_ev("brain_event", "skipped", reason=str(exc)[:200])
         try:
+            # Key + URL come from the startup config: a session may have rewritten the config on disk.
+            env = dict(os.environ)
+            try:
+                env["NEXUS_API_KEY"] = loop_notify.get_secret(
+                    self.loop["notify"].get("api_key_secret") or "NEXUS_API_KEY", self.loop["secrets"])
+            except Exception:
+                pass  # no key from the backend: the script falls back to env / key file
+            env["NEXUS_BASE_URL"] = loop_notify.nexus_url(self.loop["notify"])
             proc = subprocess.run([sys.executable, str(PLUGIN_ROOT / "scripts" / "postmortem_payload.py"),
-                                   "--root", str(self.repo)], capture_output=True, text=True, timeout=150)
+                                   "--root", str(self.repo)], capture_output=True, text=True, timeout=150, env=env)
             self._safe_ev("postmortem", "ran", reason=(proc.stdout + proc.stderr).strip()[-300:])
         except Exception as exc:
             self._safe_ev("postmortem", "skipped", reason=str(exc)[:200])
@@ -1205,7 +1219,7 @@ class Runner:
 
     def _brain_event(self, run_start: str) -> None:
         """One summary note to the Brain server (POST <url>/raw) when brain_events.enabled."""
-        be = self._load_cfg().get("brain_events") or {}
+        be = self.cfg.get("brain_events") or {}
         if not be.get("enabled") or not be.get("url"):
             return
         proc = subprocess.run([sys.executable, str(PLUGIN_ROOT / "scripts" / "council_state.py"),

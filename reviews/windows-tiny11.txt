@@ -1,10 +1,90 @@
-.........................................................................................[loop] run - start
+..........................................................................................[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked blocked: needs an API key
+[loop] escalate t001 blocked blocked: needs an API key
+[loop] run - end no runnable task left
+[loop] escalate t002 blocked also blocked
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 retry verify failed on 28929b62dd21: check failed (1): "C:\cltest\py\python.exe" -c "import sys; print('nexus-test-' + 'Zq7Xw2Lp9Rt4Vb8N'); sys.exit(1)"
+nexus-test-Zq7Xw2Lp9Rt4Vb8N
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 retry verify failed on 2dbff9108dbd: check failed (1): "C:\cltest\py\python.exe" -c "import sys; print('nexus-test-' + 'Zq7Xw2Lp9Rt4Vb8N'); sys.exit(1)"
+nexus-test-Zq7Xw2Lp9Rt4Vb8N
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 failed verify failed on 0dbfcd3a70b4: check failed (1): "C:\cltest\py\python.exe" -c "import sys; print('nexus-test-' + 'Zq7Xw2Lp9Rt4Vb8N'); sys.exit(1)"
+nexus-test-Zq7Xw2Lp9Rt4Vb8N
+[loop] escalate - run_failed run ended with 1 failed task(s)
+[loop] notify - failed NEXUS unreachable: [WinError 10061] No connection could be made because the target machine actively refused it
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] notify - key_unavailable command backend: exited 1
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked blocked: needs an API key
+[loop] escalate t001 blocked blocked: needs an API key
+[loop] notify t001 failed command backend: exited 1
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] notify - key_unavailable command backend: exited 1
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked blocked: needs an API key
+[loop] escalate t001 blocked blocked: needs an API key
+[loop] notify t001 failed command backend: exited 1
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked blocked: needs an API key
+[loop] escalate t001 blocked blocked: needs an API key
+[loop] notify t001 failed NEXUS answered HTTP 401
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked blocked: needs an API key
+[loop] escalate t001 blocked blocked: needs an API key
+[loop] notify t001 failed NEXUS accepted but did not page
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked blocked: needs an API key
+[loop] escalate t001 blocked blocked: needs an API key
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked blocked: needs an API key
+[loop] escalate t001 blocked blocked: needs an API key
+[loop] run - end no runnable task left
+[loop] postmortem - ran council post-mortem: ok=None findings=0
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked blocked: needs an API key
+[loop] escalate t001 blocked blocked: needs an API key
+[loop] notify t001 failed NEXUS answered HTTP 302
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked blocked: needs an API key
+[loop] escalate t001 blocked blocked: needs an API key
+[loop] notify t001 failed NEXUS unreachable: [WinError 10061] No connection could be made because the target machine actively refused it
+[loop] run - end no runnable task left
+........[loop] run - start
 [loop] recover t001 requeued
 [loop] attempt t001 start
 [loop] session t001 ok
 [loop] task t001 done
 [loop] run - end no runnable task left
-.loop run: a manual /council-cycle appears to be running (cycle.lock from 2026-11-10T05:38:19Z); wait for it or delete C:\Windows\Temp\tmpdt797k_9\.council\state\cycle.lock
+.loop run: a manual /council-cycle appears to be running (cycle.lock from 2026-11-10T08:04:22Z); wait for it or delete C:\Windows\Temp\tmp_6y7oyyq\.council\state\cycle.lock
 ....[loop] run - start
 [loop] task t001 blocked no runnable check -- add --verify to the task or test_commands to the config
 [loop] escalate t001 blocked no runnable check -- add --verify to the task or test_commands to the config
@@ -28,19 +108,19 @@
 loop run: runner crashed: FileNotFoundError: [WinError 2] The system cannot find the file specified
 [loop] run - crash runner crashed: FileNotFoundError: [WinError 2] The system cannot find the file specified
 [loop] escalate - crash runner crashed: FileNotFoundError: [WinError 2] The system cannot find the file specified
-loop run: a manual /council-cycle appears to be running (cycle.lock from 2026-11-10T05:38:39Z); wait for it or delete C:\Windows\Temp\tmpc9eeki5o\.council\state\cycle.lock
+loop run: a manual /council-cycle appears to be running (cycle.lock from 2026-11-10T08:04:42Z); wait for it or delete C:\Windows\Temp\tmpule3ht5b\.council\state\cycle.lock
 .[loop] run - start
 [loop] attempt t001 start
 [loop] session t001 ok
-[loop] task t001 retry verify failed on a44bf5e53018: check failed (1): "C:\cltest\py\python.exe" -c "import sys; print('sk-' + 'A1b2C3d4E5f6G7h8I9j0'); sys.exit(1)"
+[loop] task t001 retry verify failed on 339962880cea: check failed (1): "C:\cltest\py\python.exe" -c "import sys; print('sk-' + 'A1b2C3d4E5f6G7h8I9j0'); sys.exit(1)"
 sk-A1b2C3d4E5f6G7h8I9j0
 [loop] attempt t001 start
 [loop] session t001 ok
-[loop] task t001 retry verify failed on 123d494e589b: check failed (1): "C:\cltest\py\python.exe" -c "import sys; print('sk-' + 'A1b2C3d4E5f6G7h8I9j0'); sys.exit(1)"
+[loop] task t001 retry verify failed on 596abfb221c9: check failed (1): "C:\cltest\py\python.exe" -c "import sys; print('sk-' + 'A1b2C3d4E5f6G7h8I9j0'); sys.exit(1)"
 sk-A1b2C3d4E5f6G7h8I9j0
 [loop] attempt t001 start
 [loop] session t001 ok
-[loop] task t001 failed verify failed on 4920cfc9853e: check failed (1): "C:\cltest\py\python.exe" -c "import sys; print('sk-' + 'A1b2C3d4E5f6G7h8I9j0'); sys.exit(1)"
+[loop] task t001 failed verify failed on 5bdbbb139a55: check failed (1): "C:\cltest\py\python.exe" -c "import sys; print('sk-' + 'A1b2C3d4E5f6G7h8I9j0'); sys.exit(1)"
 sk-A1b2C3d4E5f6G7h8I9j0
 [loop] escalate - run_failed run ended with 1 failed task(s)
 [loop] run - end no runnable task left
@@ -256,13 +336,13 @@ loop run: runner crashed: FileNotFoundError: [WinError 2] The system cannot find
 .[loop] run - start
 [loop] attempt t001 start
 [loop] session t001 ok
-[loop] task t001 retry verify failed on f1907c72ae6a: check failed (1): "C:\cltest\py\python.exe" -c "import sys; sys.exit(1)"
+[loop] task t001 retry verify failed on e3e7fbb40696: check failed (1): "C:\cltest\py\python.exe" -c "import sys; sys.exit(1)"
 [loop] attempt t001 start
 [loop] session t001 ok
-[loop] task t001 retry verify failed on 7cdd7eb42853: check failed (1): "C:\cltest\py\python.exe" -c "import sys; sys.exit(1)"
+[loop] task t001 retry verify failed on 0079ebf8b3fa: check failed (1): "C:\cltest\py\python.exe" -c "import sys; sys.exit(1)"
 [loop] attempt t001 start
 [loop] session t001 ok
-[loop] task t001 failed verify failed on c6a57abbf4c5: check failed (1): "C:\cltest\py\python.exe" -c "import sys; sys.exit(1)"
+[loop] task t001 failed verify failed on d6b90d6f5837: check failed (1): "C:\cltest\py\python.exe" -c "import sys; sys.exit(1)"
 [loop] escalate - run_failed run ended with 1 failed task(s)
 [loop] run - end no runnable task left
 .[loop] run - start
@@ -323,8 +403,8 @@ loop run: runner crashed: FileNotFoundError: [WinError 2] The system cannot find
 .[loop] run - start
 [loop] recover t001 done
 [loop] run - end no runnable task left
-.....................s...........
+..........................s...........
 ----------------------------------------------------------------------
-Ran 166 tests in 377.976s
+Ran 189 tests in 452.137s
 
 OK (skipped=4)

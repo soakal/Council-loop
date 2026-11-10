@@ -1,81 +1,52 @@
 ---
 name: loop-log-triage
-description: Diagnose why a PAST council-loop driver run stopped, from its run-loop-*.log file — ceiling reached, goal complete, a git-safety guard, a session-limit interruption, or a stalled/blocked cycle. Complements council-loop-status-check (which watches a LIVE running driver): this one is for a log file that already finished or was abandoned. Use when the user asks "why did run X stop", "check this log", "/loop-log-triage", or points at a specific run-loop-*.log file.
+description: Diagnose why a PAST Council Loop run stopped, from logs/loop.jsonl and `loop status` — cap reached, task blocked or failed, usage-limit backoff, crash, refusal at start. Complements council-loop-status-check (which watches a LIVE runner). Use when the user asks "why did the run stop", "check the loop log", "/loop-log-triage".
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
-# Loop-log-triage: diagnose a finished or abandoned driver run
+# Loop-log-triage: diagnose a finished or abandoned run
 
-`run-loop.sh`/`run-loop.ps1` write one `run-loop-<timestamp>.log` per launch at the
-project root. This skill reads one of those files (plus `.council/state/history.jsonl`
-for ground truth) and tells you what actually happened — a one-shot, read-only report.
-It never edits anything.
+The runner logs one JSON object per event to `logs/loop.jsonl` (rotated; path = `loop.logs_dir`),
+one file per session under the same dir, and owner notices to `logs/escalations.md`. This skill
+reads them and reports what happened. It is one-shot and read-only. (Old `run-loop-*.log` files
+no longer exist; `run-loop.sh`/`.ps1` are wrappers around `loop run`.)
 
-If the driver is **still running right now**, use the `council-loop-status-check` skill
-instead — that one is for a live background task. This skill is for a log that has
-already stopped, whether cleanly or not.
+If a run is still active (`loop status` says ACTIVE), use `council-loop-status-check` instead.
 
-## 1. Find the log
-
-If the user didn't name a specific file, find the most recently modified
-`run-loop-*.log` at the project root (`ls -t run-loop-*.log | head -1`). Confirm which
-one you're using before reporting.
-
-## 2. Known failure/stop signatures — grep for these
+## 1. Gather
 
 ```bash
-grep -n "stop.flag present before cycle\|stop.flag written during cycle" <log>
-grep -n "stop.flag contents:" <log>
-grep -n "max_cycles reached\|max_minutes reached\|goal complete\|user requested stop\|target_repo is not a git repository\|target repo has uncommitted changes\|no goal set" <log>
-grep -n "resuming -- ceiling had headroom" <log>
-grep -n "You've hit your session limit" <log>
-grep -n "cycle lock held by pid" <log>
-grep -n "unreviewed path(s) in worktree" <log>
-grep -n "SECURITY: FAIL\|VERIFIER: FAIL\|ARBITRATE: DEFER" <log>
-grep -n "brain event emit skipped\|council post-mortem skipped" <log>
+loop status
+loop logs -n 80                 # add --task tNNN to focus
+tail -20 logs/escalations.md
 ```
 
-Interpret what you find:
-- **`stop.flag` present/written + its contents** is the authoritative reason the driver
-  halted — always report this verbatim if found, it's not a guess.
-- **`max_cycles`/`max_minutes` reached** is a normal, expected stop, not a failure —
-  say so plainly. A following `resuming -- ceiling had headroom` line means a later
-  relaunch already picked it back up; don't double-report it as still-stopped.
-- **A repeating "You've hit your session limit" block** at the tail of the log is a
-  Claude Code subscription usage limit, not a council-loop error — every cycle attempt
-  after it will show the same message until the reset time (given in the message
-  itself). Report the reset time, not "the loop is broken."
-- **`cycle lock held by pid <n>`** means a `begin-cycle` call hit a live or
-  not-yet-stale lock — either a genuinely concurrent invocation, or (if old enough) one
-  that will self-heal on the next attempt after `STALE_LOCK_MINUTES` (60m) passes.
-- **`unreviewed path(s) in worktree`** means the commit step found a change in TARGET
-  that no role reported this cycle — orphaned residue or unrelated work landed in
-  TARGET mid-run. This needs a human look at `git -C <target_repo> status`, not a blind
-  relaunch.
-- **`SECURITY: FAIL` / `VERIFIER: FAIL` / `ARBITRATE: DEFER`** mid-log, without a
-  matching later resolution, means that cycle was deferred (blocked, not committed) —
-  cross-check against `history.jsonl`'s verdict for that cycle number to see whether a
-  later revise attempt in the same cycle actually cleared it.
-- **`brain event emit skipped` / `council post-mortem skipped`** are both intentionally
-  best-effort and never fatal — note them only if the user is specifically debugging the
-  Brain/NEXUS loopback, not as a driver failure.
+## 2. Find the end of the run
 
-## 3. Cross-check against ground truth
+The last `run` event with outcome `end` has `reason`, `exit_code`, `sessions` and task `counts`.
+Common reasons and exit codes:
 
-`history.jsonl`'s line count is the authoritative "cycles completed" number — the
-driver log's own "Starting cycle N" counter **resets to 1 on every relaunch** (it's the
-driver's own loop counter, not the council's real cycle number). Never report the log's
-own counter as the total; always cite `wc -l .council/state/history.jsonl` (or, if the
-run has since been archived by a `/goal` call, the matching file under
-`.council/state/archive/<started_at>/history.jsonl`) alongside it.
+| Event / reason | Meaning |
+|---|---|
+| `run end`, reason `no runnable task left`, exit 0 | Nothing left to run: tasks are done or blocked (check `loop status`). |
+| `cap stop`, `max_sessions reached` / `max_hours reached`, exit 1 | A configured cap. Raise it (or rerun) if work remains. |
+| `task ... blocked` (reason inside) | Needs the owner: `loop resume --unblock ID`, or `--approve-tests ID --reason ...` for a protected test change. Reason "verification inputs changed" means tasks/config were edited mid-task. |
+| `task ... failed` | Hit `loop.max_attempts`; `loop resume --retry-failed`. |
+| `backoff` with `usage_limit`/`rate_limit`/`overloaded`/`api_error` | Claude limit or API trouble; the runner waited and retried. Report the reset time if logged. |
+| `session` outcome `timeout` | Session exceeded `loop.session_timeout_minutes`. |
+| `session` events with `permission_denials` > 0 and a following block | Headless permission classifier problem; see README Troubleshooting (`loop.allowed_tools` / `loop.permission_mode`). |
+| `run crash` | Runner exception; reason is in the event; the task was handed back. |
+| `recover` events at the start of a run | A previous run died; shows what was requeued, marked done or blocked. |
+| `stash saved` | Dirty work stashed (SHA also on the task note). |
+| `notify failed` / `[undelivered]` | NEXUS escalation not delivered (check key/URL; 401 = bad key). |
+| `postmortem` / `brain_event` skipped | Best-effort extras; never a run failure. |
 
-## 4. Report
+A refusal at start (exit 2) prints a reason to stderr and writes no `run start` event: not on a
+work branch, `loop init` missing, another run active (`run.lock`), or a fresh `cycle.lock` from
+a manual `/council-cycle`.
 
-One paragraph: which log, what it shows the stop reason to be (quoting the actual
-`stop.flag` contents or the matched signature — never a guess dressed as a fact), the
-real cycle count from `history.jsonl`, and — only if genuinely warranted — one concrete
-next action (e.g. "raise `max_cycles` and re-run", "inspect `git status` in target_repo
-before relaunching", "wait until the session-limit reset time shown in the log"). If
-nothing in the log matches a known signature, say that plainly rather than inventing an
-explanation, and quote the last 10-15 lines of the log so the user can judge for
-themselves.
+## 3. Report
+
+One paragraph: which run (`run_id`), the stop reason quoted from the log (never a guess),
+task counts from `loop status`, and at most one concrete next action. If nothing matches a known
+event, say so and quote the last 10-15 log lines.

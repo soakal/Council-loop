@@ -1,64 +1,41 @@
 ---
 name: council-loop-status-check
-description: Check the status of a currently-running Council-loop driver (run-loop.sh/run-loop.ps1) launched as a background task — cycles completed, current cycle progress, findings, whether it's stalled or hit stop.flag. Use whenever the user asks to check on a running loop, or before relaunching one to confirm it actually stopped.
+description: Check the status of a running (or recently run) Council Loop runner (`loop run`, or the run-loop.sh/run-loop.ps1 wrappers) — tasks done/blocked/failed, current task, stashes, escalations, whether it is stalled. Use whenever the user asks to check on a running loop, or before relaunching one to confirm it actually stopped.
 ---
 
-# Checking a running Council-loop driver
+# Checking the Council Loop runner
 
-The driver (`run-loop.sh`/`run-loop.ps1`) is normally launched as a background task. Its task ID
-is NOT stable — every relaunch (e.g. after the previous batch hit its iteration cap, or after a
-session-usage-limit interruption) gets a new one. Don't hardcode a task ID in a recurring check;
-find the current one each time.
-
-## Finding the current task
-
-If you don't already know the live task ID from this session's own context, ask the user which
-background task is the current driver, or check whichever task/output file was most recently
-written to under the session's task directory.
-
-## What to check
+The runner (`loop run`, also started by `run-loop.sh`/`run-loop.ps1`) writes its structured
+log to `logs/loop.jsonl` (path = `loop.logs_dir`) and keeps task state in `tasks/tasks.json`.
+Run these in the project being driven (or pass `--project DIR`):
 
 ```bash
-tail -60 <output-file>                                          # driver log: cycle summaries
-wc -l .council/state/history.jsonl                                # real cycle count (source of truth)
-cat .council/state/stop.flag 2>/dev/null || echo "(not stopped)"  # presence = halted
-date -u +%Y-%m-%dT%H:%M:%SZ                                        # for elapsed-time math
+loop status            # counts, current task, blocked/failed reasons, stashes, usage, escalations
+loop status --json     # same, machine-readable (run_active tells you if a run holds run.lock)
+loop logs -n 30        # last events; add --task t001 to focus, --follow to watch live
+tail -20 logs/escalations.md   # what the owner was told (look for [undelivered] lines)
 ```
 
-`history.jsonl`'s line count is the authoritative "cycles completed" number — the driver log's
-own "Starting cycle N" counter resets to 1 on every relaunch (it's the driver's own loop counter,
-not the council's real cycle number), so don't report that as the total.
+`loop` is `./loop` in the Council-loop clone (`loop.cmd` on Windows), or `python3 scripts/loop.py`.
 
-## Reading the driver log
+## Reading it
 
-Each completed cycle prints a summary (step taken, Security/Verifier/Realist verdicts, commit
-SHA, cycles remaining). Watch for:
-- **`ACCEPT`/`REVISE → ACCEPT`** — normal, cycle committed.
-- **Blocked mid-cycle** (e.g. a permission classifier denying a write) — the driver keeps running
-  but that cycle never completes or commits; `history.jsonl`'s count won't include it. Don't
-  assume the next relaunch will silently retry the same thing — check what's actually pending in
-  `git status` on `target_repo` before relaunching.
-- **`You've hit your session limit · resets <time>`** repeating rapidly for every remaining
-  cycle — the underlying Claude Code subscription usage limit was hit, not a real error. Further
-  relaunches before the reset time just burn iterations instantly with the same message. Check
-  the reset time (shown in the message, e.g. "resets 11pm") against the current local time before
-  relaunching.
-- **Arbiter reporting "no further leftover candidates flagged"** on an open-ended audit goal — a
-  strong signal the goal may be at or near natural completion; watch the next cycle closely rather
-  than assuming more relaunches are needed.
-
-## Percentage complete
-
-Only meaningful for a goal with a genuinely fixed, enumerable scope (rare). For an open-ended
-"find and fix X" audit, there's no fixed denominator — report cycles completed and known-flagged
-remaining candidates instead, and say plainly that any % is a rough estimate based on what's been
-named so far, not a real fraction of a known total.
+- **`run ACTIVE`** in `loop status` = a runner holds `run.lock` now. `not running` with `claimed`
+  tasks means it died; the next `loop run` recovers it.
+- **`blocked: tNNN ...`** — the reason is shown. Permission denials, protected test changes, a
+  council `blocked: <reason>` flag. Fix the cause, then `loop resume --unblock tNNN` (or
+  `--approve-tests tNNN --reason "..."`).
+- **`failed`** — hit `loop.max_attempts`; `loop resume --retry-failed [--reset-attempts]`.
+- **`backoff` events** in `loop logs` with `usage_limit`/`rate_limit` — a Claude usage limit, not a
+  loop bug; the runner waits (parsed reset time, else exponential) and retries.
+- **`stash on tNNN ...`** — uncommitted work the runner saved; inspect with `git stash list`.
+- **`cap` events / `max_sessions reached` / `max_hours reached`** — a configured cap, exit code 1.
+- **A WARNING about NEXUS 401/403 or an undelivered escalation** — the key or URL is wrong; see
+  README "Troubleshooting".
 
 ## Before relaunching
 
-1. Confirm `target_repo`'s git tree is clean (`git -C <target_repo> status --short`) — a blocked
-   or interrupted cycle can leave uncommitted Engineer edits behind. Either commit them yourself
-   after independent verification (if trivially correct) or `git checkout --` them before
-   relaunching, so the next cycle's clean-tree assumptions hold.
-2. Confirm no `stop.flag` is present (if one exists and the goal isn't actually done, the driver
-   will refuse to start — remove it only if you're intentionally overriding a halt).
+1. `loop status` shows no active run and no unexplained `claimed` task.
+2. Check `git status` on the project: the runner stashes dirty work itself, but your own
+   uncommitted edits would be stashed too.
+3. Decide how to release blocked/failed tasks (`loop resume ...`), then `loop run`.

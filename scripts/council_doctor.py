@@ -10,6 +10,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Make sibling modules importable even when Python doesn't add the script dir (-I, embeddable Windows Python).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 import council_state
 import discover_tests
 import loop_notify
@@ -150,7 +153,8 @@ def main() -> int:
     add(results, "OK" if invalid == 0 else "WARN", "history", f"{len(history)} valid line(s), {invalid} invalid line(s)")
 
     add(results, "OK" if shutil.which("git") else "FAIL", "git executable", shutil.which("git") or "not found")
-    add(results, "OK" if shutil.which("python3") else "FAIL", "python3 executable", shutil.which("python3") or "not found")
+    add(results, "OK" if shutil.which("python3") else "WARN", "python3 executable", shutil.which("python3") or
+        "not found -- the /council-* commands call python3; loop.cmd / the guard hook use the launcher below")
     launcher = next((shutil.which(n) for n in ("python3", "python", "py") if shutil.which(n)), None)
     add(results, "OK" if launcher else "FAIL", "python launcher", launcher or "none of python3/python/py on PATH -- "
         "the PreToolUse guard hook (scripts/hooks/guard.py) cannot run without one")
