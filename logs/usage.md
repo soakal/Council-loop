@@ -27,3 +27,6 @@ Approximate. Tokens are what the harness reports per subagent; "Codex" rows are 
 | Core | Codex checkpoint | Codex CLI | ~64k | 9 findings (5 high), `reviews/codex-core.md` |
 | T7 | review fixes | Opus 5.5 | ~3k (incremental) | 127 tests pass |
 | T8 | review fixes | Opus 5.5 | see T8 row | Test changes: own T8 tests — "unblock twice" now expects no-op (Fable nit); setUp strips COUNCIL_LOOP_RUN so CLI tests run inside a loop session. Flaky test_timeout_kills_child_tree → fixed in T8b |
+| T8b | implement (Codex fixes + flaky test) | Opus 5.5 | ~152k | 162 tests ×5 runs pass. Test change #10: tree-kill test read /proc twice (race) → single read, ProcessLookupError/FileNotFound/Z = gone, 5 s bound; still fails with killpg disabled |
+| T8b | review | Fable 5.2 | ~84k | 1 required (Windows taskkill pid reuse), test #10 change approved as not weakening |
+| T8b | review fixes | Opus 5.5 | ~10k (incremental) | 165 tests pass ×2 |
