@@ -26,10 +26,17 @@ _PATTERNS = [
     (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+"), "Bearer " + REDACTED),
     (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), REDACTED),
     (re.compile(r"\bpst_[A-Za-z0-9_-]{8,}"), REDACTED),
-    # Generic key=value assignments: keep the key, mask the value.
-    (re.compile(r"(?i)\b(password|passwd|token|secret|api[_-]?key)(\s*=\s*)([\"']?)[^\s\"'&,;]+"),
+    (re.compile(r"(?i)\b(Authorization:\s*)\S+\s+\S+"), r"\1" + REDACTED),
+    # Credentials embedded in URLs: scheme://user:pass@host
+    (re.compile(r"(://[^/\s:@]+:)[^/\s@]+@"), r"\1" + REDACTED + "@"),
+    # Generic key=value / "key": "value" assignments, keyword must END the key
+    # (DB_PASSWORD, access_token) so tokens/input_tokens stay intact.
+    (re.compile(r"(?i)([\w-]*(?:password|passwd|token|secret|api[_-]?key))([\"']?\s*[:=]\s*)([\"']?)[^\s\"'&,;]+"),
      r"\1\2\3" + REDACTED),
 ]
+
+# Dict keys whose string values are always masked (same keyword-at-end rule).
+_SECRET_KEY = re.compile(r"(?i)[\w-]*(?:password|passwd|token|secret|api[_-]?key)$")
 
 # Exact secret values registered at runtime (e.g. a secret the runner fetched).
 _SECRETS = set()
@@ -51,7 +58,9 @@ def redact(obj):
             obj = pattern.sub(repl, obj)
         return obj
     if isinstance(obj, dict):
-        return {redact(k) if isinstance(k, str) else k: redact(v) for k, v in obj.items()}
+        return {(redact(k) if isinstance(k, str) else k):
+                (REDACTED if isinstance(k, str) and isinstance(v, str) and _SECRET_KEY.match(k) else redact(v))
+                for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [redact(v) for v in obj]
     return obj
@@ -118,6 +127,10 @@ def write_session_log(logs_dir, name, text, keep=200):
     """Write redacted session output to <logs_dir>/sessions/<name>.log and keep the newest `keep`."""
     sessions = Path(logs_dir) / "sessions"
     sessions.mkdir(parents=True, exist_ok=True)
+    # Keep the name a plain file name so it cannot escape sessions/.
+    name = re.sub(r"[^\w.-]", "_", str(name))
+    if name in ("", ".", ".."):
+        raise ValueError("invalid session log name")
     path = sessions / (name + ".log")
     path.write_text(redact(text), encoding="utf-8")
     logs = sorted(sessions.glob("*.log"), key=lambda p: (p.stat().st_mtime, p.name), reverse=True)

@@ -88,6 +88,44 @@ class LogTests(unittest.TestCase):
             self.assertNotIn(value, session, name)
         self.assertIn("[REDACTED]", jsonl)
 
+    def test_review_token_shapes(self):
+        # Env-style, query-string, JSON-text, header and URL-credential secrets.
+        cases = {
+            "SERVICE_API_KEY=abc123def": "abc123def",
+            "GITHUB_TOKEN=tok456value": "tok456value",
+            "DB_PASSWORD=hunter2": "hunter2",
+            "https://x.test/cb?access_token=abc123": "abc123",
+            '{"token": "jsonsecret1"}': "jsonsecret1",
+            "Authorization: Basic dXNlcjpwYXNz": "dXNlcjpwYXNz",
+            "https://alice:urlpass99@host.test/repo": "urlpass99",
+        }
+        lg = self.logger()
+        for text, value in cases.items():
+            lg.event("leak", note=text)
+            loop_log.write_session_log(self.dir, "shape", text)
+            session = (self.dir / "sessions" / "shape.log").read_text(encoding="utf-8")
+            self.assertNotIn(value, session, text)
+        jsonl = (self.dir / "loop.jsonl").read_text(encoding="utf-8")
+        for text, value in cases.items():
+            self.assertNotIn(value, jsonl, text)
+
+    def test_dict_key_redaction(self):
+        out = loop_log.redact({"api_key": "plainvalue", "nested": [{"DB_PASSWORD": "pw1"}],
+                               "tokens": 123, "input_tokens": 5, "note": "tokens used: 5"})
+        self.assertEqual(out["api_key"], "[REDACTED]")
+        self.assertEqual(out["nested"][0]["DB_PASSWORD"], "[REDACTED]")
+        self.assertEqual((out["tokens"], out["input_tokens"], out["note"]), (123, 5, "tokens used: 5"))
+        self.assertEqual(loop_log.redact({"tokens": 123, "input_tokens": 5}),
+                         {"tokens": 123, "input_tokens": 5})
+
+    def test_session_name_sanitised(self):
+        path = loop_log.write_session_log(self.dir, "../evil/name", "x")
+        self.assertEqual(path.parent, self.dir / "sessions")
+        self.assertEqual(path.name, ".._evil_name.log")
+        for bad in (".", "..", ""):
+            with self.assertRaises(ValueError):
+                loop_log.write_session_log(self.dir, bad, "x")
+
     def test_registered_secret(self):
         value = "Xy9-plain-looking-value"
         loop_log.register_secret(value)
