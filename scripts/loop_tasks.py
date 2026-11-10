@@ -28,10 +28,11 @@ TRANSITIONS = {
     "done": set(),
 }
 # Fields update() may change; id/created_at/updated_at are managed here.
+# tests_approved: set by loop_runner.approve_tests (owner/reviewer release of a test change).
 UPDATABLE = {
     "description", "acceptance", "verify", "status", "owner", "attempts", "depends_on",
     "allow_test_changes", "branch", "verified_sha", "commit", "reason", "notes",
-    "claimed_at", "escalated_at",
+    "claimed_at", "escalated_at", "tests_approved",
 }
 
 
