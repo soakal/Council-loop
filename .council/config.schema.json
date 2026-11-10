@@ -107,7 +107,7 @@
         "protected_paths": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
-          "description": "Globs for existing test files/config; modifying or deleting one blocks the task until approved."
+          "description": "Globs for existing test files/config; modifying or deleting one blocks the task until approved. package.json `scripts` and pyproject.toml `tool.pytest` are always checked too."
         },
         "secrets": {
           "type": "object",

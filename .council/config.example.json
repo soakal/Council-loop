@@ -58,7 +58,12 @@
       "pytest.ini",
       "tox.ini",
       "scripts/validate.sh",
-      ".github/workflows/**"
+      ".github/workflows/**",
+      "**/jest.config.*",
+      "**/vitest.config.*",
+      "**/playwright.config.*",
+      "**/.mocharc*",
+      "noxfile.py"
     ],
     "secrets": {
       "backend": "command",

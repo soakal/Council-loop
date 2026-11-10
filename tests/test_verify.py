@@ -228,5 +228,93 @@ class GateTests(unittest.TestCase):
             lr.gate(self.repo, task, self.cfg, frozen, now - 1)
 
 
+class HardeningGateTests(unittest.TestCase):
+    """T8b (reviews/codex-core.md) gate items. Borrows GateTests' fixture."""
+
+    setUp, tearDown, claim, finish = GateTests.setUp, GateTests.tearDown, GateTests.claim, GateTests.finish
+
+    PKG = {"name": "app", "scripts": {"test": "jest"}, "dependencies": {"left-pad": "1.0.0"}}
+
+    def on_dev(self, path, text):
+        """Commit a file on dev before the task branch is cut."""
+        commit(self.repo, path, text, f"add {path}")
+
+    # 1. test-runner config and manifest test sections are protected
+    def test_package_json_dependency_edit_passes(self):
+        self.on_dev("package.json", json.dumps(self.PKG))
+        task, frozen = self.claim()
+        commit(self.repo, "package.json", json.dumps({**self.PKG, "dependencies": {"left-pad": "2.0.0"}}))
+        self.assertEqual(self.finish(task, frozen)["status"], "done")
+
+    def test_package_json_scripts_test_edit_blocks(self):
+        self.on_dev("web/package.json", json.dumps(self.PKG))
+        task, frozen = self.claim()
+        commit(self.repo, "web/package.json", json.dumps({**self.PKG, "scripts": {"test": "true"}}))
+        res = self.finish(task, frozen)
+        self.assertEqual(res["status"], "blocked")
+        self.assertIn("web/package.json (scripts)", res["reason"])
+
+    def test_package_json_unparseable_blocks(self):
+        self.on_dev("package.json", json.dumps(self.PKG))
+        task, frozen = self.claim()
+        commit(self.repo, "package.json", "{not json")
+        self.assertIn("package.json (scripts)", self.finish(task, frozen)["reason"])
+
+    def test_pyproject_pytest_edit_blocks_but_other_edit_passes(self):
+        base = '[project]\nname = "app"\nversion = "1"\n\n[tool.pytest.ini_options]\naddopts = "-q"\n'
+        self.on_dev("pyproject.toml", base)
+        task, frozen = self.claim()
+        commit(self.repo, "pyproject.toml", base.replace('version = "1"', 'version = "2"'))
+        try:
+            import tomllib  # noqa: F401
+            self.assertEqual(lr.protected_changes(self.repo, "dev", task["branch"], []), [])
+        except ImportError:  # no tomllib: any pyproject change counts
+            pass
+        commit(self.repo, "pyproject.toml", base.replace('"-q"', '"-q --co"'))
+        res = self.finish(task, frozen)
+        self.assertEqual(res["status"], "blocked")
+        self.assertIn("pyproject.toml (tool.pytest)", res["reason"])
+
+    def test_jest_config_edit_blocks(self):
+        self.on_dev("jest.config.js", "module.exports = {};\n")
+        task, frozen = self.claim()
+        commit(self.repo, "jest.config.js", "module.exports = {testMatch: []};\n")
+        res = self.finish(task, frozen)
+        self.assertEqual(res["status"], "blocked")
+        self.assertIn("jest.config.js", res["reason"])
+
+    # 2. base_branch is frozen
+    def test_base_branch_change_after_freeze_blocks(self):
+        task, frozen = self.claim()
+        commit(self.repo, "app.py", "x = 9\n")
+        dev, main = git(self.repo, "rev-parse", "dev"), git(self.repo, "rev-parse", "main")
+        self.cfg["loop"]["base_branch"] = "main"
+        self.assertIn("base_branch", lr.inputs_tampered(self.store, self.cfg, frozen))
+        res = self.finish(task, frozen)
+        self.assertEqual(res["status"], "blocked")
+        self.assertIn("base_branch", res["reason"])
+        self.assertEqual(self.store.load()[0]["status"], "blocked")
+        self.assertEqual((git(self.repo, "rev-parse", "dev"), git(self.repo, "rev-parse", "main")), (dev, main))
+
+    # 7. a frozen "no check" is never re-discovered after the model edits the repo
+    def test_frozen_no_check_not_rediscovered(self):
+        task, frozen = self.claim(verify=[])
+        frozen["checks"] = None
+        commit(self.repo, "package.json", json.dumps({"scripts": {"test": "true"}}))
+        res = lr.gate(self.repo, task, self.cfg, frozen, time.monotonic() + 60, task_store=self.store)
+        self.assertEqual((res["status"], res["reason"]), ("blocked", "no runnable check"))
+
+    # 8. secrets in check output never reach tasks.json
+    def test_secret_in_check_output_redacted(self):
+        token = "sk-" + "A1b2C3d4E5f6G7h8I9j0"
+        # Token assembled at run time so it is in the output only, not in the task's verify text.
+        task, frozen = self.claim(verify=[f'{PY} -c "import sys; print(\'sk-\' + \'{token[3:]}\'); sys.exit(1)"'])
+        commit(self.repo, "app.py", "x = 10\n")
+        res = self.finish(task, frozen)
+        self.assertNotIn(token, res["output_tail"])
+        self.assertNotIn(token, self.store.path.read_text())
+        self.assertIn("verify failed", self.store.load()[0]["reason"])
+
+
 if __name__ == "__main__":
     unittest.main()
