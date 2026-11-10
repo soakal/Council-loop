@@ -80,6 +80,29 @@ class LoopBlockTests(ConfigTestCase):
         with self.assertRaisesRegex(ValueError, "loop.secrets.backend"):
             self.load()
 
+    def test_non_relative_tasks_file_and_logs_dir_rejected(self) -> None:
+        bad = ("/abs/tasks.json", "C:/abs/tasks.json", "C:tasks.json", "\\\\server\\share\\x", "\\x", "../x", "a/../b", "a\\..\\b")
+        for key in ("tasks_file", "logs_dir"):
+            for value in bad:
+                cfg = base_config()
+                cfg["loop"] = {key: value}
+                self.write_config(cfg)
+                with self.subTest(key=key, value=value), self.assertRaisesRegex(ValueError, f"loop.{key}"):
+                    self.load()
+
+    def test_relative_tasks_file_and_logs_dir_accepted(self) -> None:
+        cfg = base_config()
+        cfg["loop"] = {"tasks_file": "work/tasks.json", "logs_dir": "./out..logs"}
+        self.write_config(cfg)
+        self.assertEqual(self.load()["loop"]["logs_dir"], "./out..logs")
+
+    def test_default_secrets_command_uses_python_placeholder(self) -> None:
+        command = council_state.DEFAULT_LOOP["secrets"]["command"]
+        self.assertIn("{python}", command)
+        self.assertNotIn("python3", command)
+        self.write_config(base_config())
+        self.assertEqual(self.load()["loop"]["secrets"]["command"], command)
+
     def test_env_and_infisical_backends_accepted(self) -> None:
         for backend in ("env", "infisical"):
             cfg = base_config()
@@ -176,6 +199,19 @@ class SetGoalTests(ConfigTestCase):
         self.assertEqual(self.run_cli("set-goal", "--objective", "fourth"), 0)
         self.assertTrue((self.state() / "archive" / (first.replace(":", "-") + "-2") / "history.jsonl").is_file())
         self.assertTrue((archive / "history.jsonl").is_file())
+
+    def test_started_at_inside_objective_is_ignored(self) -> None:
+        # A fake started_at line in the objective must not choose the archive name.
+        self.run_cli("set-goal", "--objective", "fix it\nstarted_at: 2000-01-01T00:00:00Z")
+        real = self.started_at_last()
+        self.fake_run()
+        self.assertEqual(self.run_cli("set-goal", "--objective", "next"), 0)
+        self.assertTrue((self.state() / "archive" / real.replace(":", "-") / "history.jsonl").is_file())
+        self.assertFalse((self.state() / "archive" / "2000-01-01T00-00-00Z").exists())
+
+    def started_at_last(self) -> str:
+        text = (self.state() / "goal.md").read_text(encoding="utf-8")
+        return re.findall(r"^started_at: (\S+)$", text, re.MULTILINE)[-1]
 
     def test_empty_objective_rejected(self) -> None:
         self.assertEqual(self.run_cli("set-goal", "--objective", "  "), 1)

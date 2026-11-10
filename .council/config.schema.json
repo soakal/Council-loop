@@ -116,7 +116,7 @@
               "type": "array",
               "minItems": 1,
               "items": { "type": "string", "minLength": 1 },
-              "description": "For backend 'command': argv template; '{name}' is replaced by the secret name and the value is read from stdout (never passed via argv)."
+              "description": "For backend 'command': argv template; '{name}' is replaced by the secret name, '{python}' by the running Python interpreter, and the value is read from stdout (never passed via argv)."
             }
           }
         },

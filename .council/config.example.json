@@ -62,7 +62,7 @@
       "backend": "command",
       "command": [
         "secret", "run", "{name}", "--",
-        "python3", "-c", "import os,sys;sys.stdout.write(os.environ[sys.argv[1]])", "{name}"
+        "{python}", "-c", "import os,sys;sys.stdout.write(os.environ[sys.argv[1]])", "{name}"
       ]
     },
     "notify": {

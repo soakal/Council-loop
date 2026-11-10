@@ -11,7 +11,7 @@ import re
 import shutil
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 
@@ -76,11 +76,13 @@ DEFAULT_LOOP: dict[str, Any] = {
     ],
     "secrets": {
         "backend": "command",
-        # "{name}" is replaced by the secret's name. The value comes back on the
-        # helper's stdout only -- it never appears in any process's argv.
+        # "{name}" is replaced by the secret's name; "{python}" by sys.executable
+        # (the T9 backend substitutes it -- a bare "python3" is often missing on
+        # Windows). The value comes back on the helper's stdout only -- it never
+        # appears in any process's argv.
         "command": [
             "secret", "run", "{name}", "--",
-            "python3", "-c", "import os,sys;sys.stdout.write(os.environ[sys.argv[1]])", "{name}",
+            "{python}", "-c", "import os,sys;sys.stdout.write(os.environ[sys.argv[1]])", "{name}",
         ],
     },
     "notify": {
@@ -297,6 +299,13 @@ def validate_loop_block(loop: Any) -> None:
     for key in ("branch_prefix", "tasks_file", "logs_dir", "claude_bin"):
         if not _is_text(loop.get(key)):
             raise ValueError(f"loop.{key} must be a non-empty string")
+    for key in ("tasks_file", "logs_dir"):
+        # Must stay inside the project: no absolute path (POSIX or Windows) and no '..'.
+        value = loop[key]
+        if PurePosixPath(value).is_absolute() or PureWindowsPath(value).drive or value.startswith(("/", "\\")):
+            raise ValueError(f"loop.{key} must be a project-relative path, not absolute: {value!r}")
+        if ".." in re.split(r"[\\/]", value):
+            raise ValueError(f"loop.{key} must not contain a '..' component: {value!r}")
     paths = loop.get("protected_paths")
     if not isinstance(paths, list) or not all(_is_text(item) for item in paths):
         raise ValueError("loop.protected_paths must be an array of non-empty strings")
@@ -430,12 +439,14 @@ def cmd_set_goal(args: argparse.Namespace) -> int:
             if (state_dir / name).exists()
         ]
         if movable:
+            # started_at is written as goal.md's LAST line, so take the last match;
+            # a "started_at:" line inside the objective/criteria text comes earlier.
             started = None
-            match = GOAL_STARTED_RE.search(goal_path.read_text(encoding="utf-8"))
-            if match:
+            matches = GOAL_STARTED_RE.findall(goal_path.read_text(encoding="utf-8"))
+            if matches:
                 try:
-                    _parse_utc_ts(match.group(1))
-                    started = match.group(1)
+                    _parse_utc_ts(matches[-1])
+                    started = matches[-1]
                 except ValueError:
                     pass
             # ':' is invalid in Windows paths.
