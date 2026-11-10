@@ -20,4 +20,10 @@ Approximate. Tokens are what the harness reports per subagent; "Codex" rows are 
 | T5 | review fixes | Opus 5.5 | ~19k (incremental) | 88 tests pass; merged d53db6e |
 | T6 | implement | Opus 5.5 | ~163k | 18 new tests, 106 total pass |
 | T6 | review | Fable 5.2 | ~107k | CHANGES: 7 required (no-work done, orphaned session on Ctrl-C, cap override, excludes, permission mode, limit-as-success, crash escalation) |
-| T6 | review fixes | Opus 5.5 | ~see notification | 119 tests pass. Test change: own T6 assertion `tasks/`→`/tasks/` (anchoring required by Fable #4; stricter, not weaker) |
+| T6 | review fixes | Opus 5.5 | ~42k (incremental) | 119 tests pass. Test change: own T6 assertion `tasks/`→`/tasks/` (anchoring required by Fable #4; stricter, not weaker) |
+| T7 | implement | Opus 5.5 | ~80k | 5 new tests, 124 total pass |
+| T8 | implement | Opus 5.5 | ~127k | 12 new tests, 131 total pass |
+| T7+T8 | review + Codex triage | Fable 5.2 | ~126k | T7 CHANGES (2 prompt edits), T8 CHANGES (model can self-approve via CLI). Reviewer also ran 1 real claude -p session by accident (~$0.47): proved BLOCKED path end-to-end |
+| Core | Codex checkpoint | Codex CLI | ~64k | 9 findings (5 high), `reviews/codex-core.md` |
+| T7 | review fixes | Opus 5.5 | ~3k (incremental) | 127 tests pass |
+| T8 | review fixes | Opus 5.5 | see T8 row | Test changes: own T8 tests — "unblock twice" now expects no-op (Fable nit); setUp strips COUNCIL_LOOP_RUN so CLI tests run inside a loop session. Flaky test_timeout_kills_child_tree → fixed in T8b |
