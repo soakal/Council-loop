@@ -12,7 +12,7 @@ Paths below (`.council/...`, `stop.flag`, etc.) are relative to the current proj
 never to wherever this plugin itself is installed. Script invocations use
 `${CLAUDE_PLUGIN_ROOT}` explicitly for exactly that reason.
 
-**Headless rule:** when running headless (`COUNCIL_LOOP_RUN=1` is set, or the session is non-interactive, e.g. `claude -p`), NEVER ask the user a question or wait for input — nobody is there to answer. If a decision truly needs the owner, block instead: write `stop.flag` = `blocked: <one-line reason>` (see §2) and end the cycle.
+**No-questions rule:** NEVER ask the user a question or wait for input during /council-cycle — block instead. It usually runs headless (`COUNCIL_LOOP_RUN=1`, `claude -p`) where nobody is there to answer. If a decision truly needs the owner, block instead: write `stop.flag` = `blocked: <one-line reason>` (see §2) and end the cycle.
 
 ## 0. Preflight
 - Load and validate the effective config first: run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/council_state.py effective-config` (Council Loop is a plugin; its `.council/` state belongs to the current project — the directory you're actually working in — never to wherever the plugin itself is installed). If it fails, write `stop.flag` = the helper's `invalid council config: <brief reason>` message, print it, and STOP. If there is no `.council/config.json` yet in the current project, tell the user to run `/goal` first (it bootstraps one) and STOP. Use the helper's JSON output as `config`. Resolve **TARGET** = `config.target_repo`; if it is `"."`, TARGET is the current project directory. **All code changes and commits happen in TARGET.**

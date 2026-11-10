@@ -41,6 +41,22 @@ class CouncilPromptTests(unittest.TestCase):
         for flag in ("goal complete", *loop_runner.CEILING_FLAGS):
             self.assertIn(f"`{flag}", text, flag)
 
+    def test_goal_single_quotes_set_goal_args(self):
+        # Double quotes would let backticks / $(...) in the goal text run in the shell.
+        text = read("commands/goal.md")
+        self.assertIn("--objective '<objective>' --acceptance '<criteria, or empty>'", text)
+        self.assertIn("'\\''", text)
+        self.assertNotIn('--objective "<objective>"', text)
+
+    def test_arbiter_ambiguity_block_is_narrow(self):
+        text = read("agents/arbiter.md")
+        self.assertIn("no reasonable default exists AND a wrong guess would be costly to undo", text)
+        self.assertIn("state the assumption in WHY", text)
+
+    def test_cycle_no_questions_rule_is_unconditional(self):
+        self.assertIn("NEVER ask the user a question or wait for input during /council-cycle — block instead",
+                      read("commands/council-cycle.md"))
+
 
 if __name__ == "__main__":
     unittest.main()
