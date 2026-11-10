@@ -54,3 +54,4 @@ Approximate. Tokens are what the harness reports per subagent; "Codex" rows are 
 | T12b | final Codex fixes | Opus 5.5 | ~108k | 189 tests; Fable APPROVE (~72k) |
 | Dogfood run 7 | loop run (t12) | council via claude -p | 1 session $0.64 | t12 done+merged by gate |
 | **Loop total** | 7 runs | council via claude -p | 12 sessions, ~2.9M tokens, **$12.28** | from `loop status` (cost_usd in logs/loop.jsonl) |
+| Report | write | Fable 5.2 | ~90k | REPORT.md |
