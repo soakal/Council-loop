@@ -17,3 +17,7 @@ Approximate. Tokens are what the harness reports per subagent; "Codex" rows are 
 | T1–T4 | review fixes | Opus 5.5 | ~40k total (incremental) | 68 tests + validate.sh pass after merge |
 | T5 | implement | Opus 5.5 | ~99k | 14 new tests, 82 total pass |
 | T5 | review | Fable 5.2 | ~78k | CHANGES: 3 gate-gaming holes + half-merge path |
+| T5 | review fixes | Opus 5.5 | ~19k (incremental) | 88 tests pass; merged d53db6e |
+| T6 | implement | Opus 5.5 | ~163k | 18 new tests, 106 total pass |
+| T6 | review | Fable 5.2 | ~107k | CHANGES: 7 required (no-work done, orphaned session on Ctrl-C, cap override, excludes, permission mode, limit-as-success, crash escalation) |
+| T6 | review fixes | Opus 5.5 | ~see notification | 119 tests pass. Test change: own T6 assertion `tasks/`→`/tasks/` (anchoring required by Fable #4; stricter, not weaker) |
