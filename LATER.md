@@ -20,3 +20,4 @@ One line per item. Nothing here gets built without a new approved plan.
 - CLI: `loop resume --retry-failed/--unblock` does not re-queue dependents that block_unreachable marked blocked ("dependency X"); they need their own `--unblock`.
 - Direct `python -c`/script edits to other tasks' entries in tasks.json remain tripwire-only (§9).
 - Gate: a frozen check that calls an unprotected script (e.g. `npm test` -> `scripts/run-tests.sh`, a Makefile target) can still be emptied by the model (tripwire limit; T8b protects only runner config + package.json `scripts` / pyproject `tool.pytest`).
+- Notify: retry undelivered escalations (resend pass at run start/end; keep one page per task/event).

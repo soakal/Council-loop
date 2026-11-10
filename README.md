@@ -153,8 +153,8 @@ A failed send never stops the run: it adds an `[undelivered]` line to `escalatio
 
 At the end of every run the runner also does two best-effort extras that never change the exit
 code: the Brain run-complete event (if `brain_events.enabled`) and the NEXUS post-mortem
-(`scripts/postmortem_payload.py`; needs `NEXUS_API_KEY` in the environment or
-`~/.config/nexus/api_key`).
+(`scripts/postmortem_payload.py`; it uses the same key and URL as escalations, taken from the
+config as it was at run start, else `NEXUS_API_KEY` in the environment or `~/.config/nexus/api_key`).
 
 ### Caps and config
 

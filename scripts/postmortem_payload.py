@@ -21,8 +21,6 @@ happens to be on the machine driving the loop.
 from __future__ import annotations
 
 import argparse
-import contextlib
-import io
 import json
 import os
 import subprocess
@@ -30,6 +28,9 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import loop_notify  # noqa: E402  (no-redirect opener: the Bearer key never follows a 3xx)
 
 # This plugin's own root -- council_state.py lives at SCRIPT_DIR/scripts/council_state.py,
 # a sibling of THIS script. Used only to find that script. Never used to locate .council/
@@ -171,18 +172,8 @@ def build_payload(root: Path) -> dict:
     return payload
 
 
-def _api_key(root: Path | None = None) -> str | None:
-    # 1. the configured secrets backend (loop.secrets, same as escalations), 2. env, 3. key file.
-    if root is not None:
-        try:
-            sys.path.insert(0, str(Path(__file__).resolve().parent))
-            import council_state
-            import loop_notify
-            with contextlib.redirect_stderr(io.StringIO()):
-                loop = council_state.load_config(root)["loop"]
-            return loop_notify.get_secret(loop["notify"]["api_key_secret"], loop["secrets"])
-        except Exception:
-            pass  # no config / backend unavailable: fall through to the old sources
+def _api_key() -> str | None:
+    # env (the runner passes the key fetched with its startup config), else the key file.
     key = os.environ.get("NEXUS_API_KEY")
     if key:
         return key
@@ -204,7 +195,7 @@ def main() -> int:
     args = parser.parse_args()
     root = Path(args.root).resolve()
 
-    key = _api_key(root)
+    key = _api_key()
     if not key:
         print("council post-mortem skipped: no NEXUS_API_KEY (env or ~/.config/nexus/api_key)")
         return 0
@@ -224,7 +215,7 @@ def main() -> int:
     try:
         # 120s: NEXUS runs the post-mortem SYNCHRONOUSLY (deterministic checks
         # + one Haiku call). The run is already over, nothing is blocked by waiting.
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with loop_notify.OPENER.open(req, timeout=120) as resp:
             result = json.loads(resp.read().decode("utf-8"))
         findings = len((result.get("result") or {}).get("findings") or [])
         ok = (result.get("result") or {}).get("ok")

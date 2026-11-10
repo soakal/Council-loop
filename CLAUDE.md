@@ -179,7 +179,9 @@ logs note` (`--project DIR`, default cwd). Python 3.9+, stdlib only, Linux and W
   to tests, test configs, `scripts/validate.sh`, CI workflows.
 - **Escalation:** `scripts/loop_notify.py` posts a NEXUS flag (`/api/safety/flags`) when
   `loop.notify.enabled` is true (default false); the key is fetched by name through
-  `loop.secrets` (`command`/`env`/`infisical`). Failures are logged as `[undelivered]`, never fatal.
+  `loop.secrets` (`command`/`env`/`infisical`) once at run start (so it is masked before any
+  session output is written; failure logs `notify key_unavailable` and the run continues). HTTP
+  redirects are never followed. Failures are logged as `[undelivered]`, never fatal.
 - **Windows:** the suite passed on Windows 11 (Tiny11) at commit WINDOWS_SHA (see `reviews/windows-tiny11.txt`).
 
 ## Brain event loopback (best-effort, end of a `loop run`)
@@ -213,11 +215,13 @@ logs note` (`--project DIR`, default cwd). Python 3.9+, stdlib only, Linux and W
   vice versa. It fires at run end because `set-goal` MOVES `.council/state/history.jsonl` into
   `.council/state/archive/` for the next attempt/session (known limit: a multi-attempt run reports
   its last attempt only; see LATER.md).
-- **Auth is `NEXUS_API_KEY`** (environment variable; the script also falls back to
-  `~/.config/nexus/api_key`), optionally `NEXUS_BASE_URL` (default `http://127.0.0.1:8000`, a
-  harmless local placeholder) — a machine-level setting, never written into any tracked or
-  `config.local.json` file. With neither set the script prints `"council post-mortem skipped: no
-  NEXUS_API_KEY (env or ~/.config/nexus/api_key)"` and exits 0.
+- **Auth is `NEXUS_API_KEY`** in the script's environment (falling back to
+  `~/.config/nexus/api_key`), posted to `NEXUS_BASE_URL` (default `http://127.0.0.1:8000`). The
+  script never reads the config itself: the runner fetches the key through the `loop.secrets`
+  backend and resolves the URL (`loop.notify.nexus_url`, else env, else default) from the config
+  loaded at run START, and passes both in the child's environment — a session that rewrites the
+  config cannot redirect the key. Redirects are not followed. With no key the script prints
+  `"council post-mortem skipped: no NEXUS_API_KEY (env or ~/.config/nexus/api_key)"` and exits 0.
 - **Manual `/council-cycle` invocations never trigger this.** **Best-effort, never fatal.**
   A down NEXUS, a rotated/missing key (401, which `loop status` flags) or a rate limit (429)
   degrade to one logged skip line.
