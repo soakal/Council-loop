@@ -627,16 +627,18 @@ RESET_EPOCH = re.compile(r"(?i)(?:limit|reset)[^\n]{0,40}?\b(1[6-9]\d{8})\b")
 def runtime_excludes(cfg: dict | None = None) -> list[str]:
     """Root-anchored exclude patterns for what loop runs write (tasks, logs, state, local config).
 
-    Anchored so a project's own src/tasks/ or app/logs/ is never hidden from git.
+    Anchored so a project's own src/tasks/ or app/logs/ is never hidden from git. Directories are
+    excluded as `/dir/*` (contents, not the dir itself) so a .gitignore negation can still track
+    e.g. logs/usage.md or tasks/.gitkeep.
     """
     loop = (cfg or {}).get("loop") or {}
     tasks = PurePosixPath(Path(loop.get("tasks_file") or "tasks/tasks.json").as_posix())
     logs = PurePosixPath(Path(loop.get("logs_dir") or "logs").as_posix())
     if str(tasks.parent) not in ("", "."):
-        task_pats = [f"/{tasks.parent}/"]
+        task_pats = [f"/{tasks.parent}/*"]
     else:  # tasks file at the project root: the file, its lock and atomic-write temp files
         task_pats = [f"/{tasks.name}", f"/{tasks.stem}.lock", f"/.{tasks.name}.*.tmp"]
-    return [*task_pats, f"/{logs}/", "/.council/state/", "/.council/config.json", "/.council/config.local.json"]
+    return [*task_pats, f"/{logs}/*","/.council/state/", "/.council/config.json", "/.council/config.local.json"]
 
 
 def ensure_excludes(repo, cfg: dict | None = None, extra=()) -> list[str]:
@@ -649,7 +651,13 @@ def ensure_excludes(repo, cfg: dict | None = None, extra=()) -> list[str]:
         path = Path(repo) / path
     path.parent.mkdir(parents=True, exist_ok=True)
     text = path.read_text(encoding="utf-8") if path.exists() else ""
-    have = {line.strip() for line in text.splitlines()}
+    # Upgrade pre-1.2 wholesale lines (`/logs/`) in place to `/logs/*`, which negations can see through.
+    old = {p[:-1]: p for p in runtime_excludes(cfg) if p.endswith("/*")}
+    lines = text.splitlines(keepends=True)
+    if any(line.strip() in old for line in lines):
+        text = "".join(old[line.strip()] + "\n" if line.strip() in old else line for line in lines)
+        path.write_text(text, encoding="utf-8")
+    have ={line.strip() for line in text.splitlines()}
     added = [p for p in (*runtime_excludes(cfg), *JUNK_EXCLUDES, *extra) if p not in have]
     if added:
         sep = "" if not text or text.endswith("\n") else "\n"

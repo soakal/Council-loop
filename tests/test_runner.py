@@ -290,7 +290,7 @@ class RunnerTests(unittest.TestCase):
         res = self.runner().run()
         self.assertEqual(res["exit_code"], 2)
         self.assertIn("loop init", res["stop_reason"])
-        self.assertEqual(lr.ensure_excludes(self.repo)[:1], ["/tasks/"])  # anchored (review item 4)
+        self.assertEqual(lr.ensure_excludes(self.repo)[:1], ["/tasks/*"])  # anchored (review item 4)
         self.assertEqual(lr.ensure_excludes(self.repo), [])  # idempotent
 
     def test_orphan_cycle_lock_removed(self):
@@ -463,7 +463,7 @@ class ReviewFixTests(unittest.TestCase):
         self.assertFalse(ignored("src/tasks/a.py"))
         self.assertFalse(ignored("app/logs/b.py"))
         self.assertEqual(lr.runtime_excludes({"loop": {"tasks_file": "work/list.json", "logs_dir": "out/log"}})[:2],
-                         ["/work/", "/out/log/"])
+                         ["/work/*", "/out/log/*"])
 
     # 5. permission mode + allowed tools; bypassPermissions refused; frozen against tampering
     def test_permission_flags_passed_and_frozen(self):
