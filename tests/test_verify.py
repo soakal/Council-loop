@@ -155,11 +155,13 @@ class GateTests(unittest.TestCase):
         self.assertEqual((ok, rc), (False, None))
         self.assertIn("timed out", tail)
         pid = int(pidfile.read_text())
+        # T8b #10: the old exists()-then-read_text() raced the reaper (FileNotFoundError ~1 run in 3);
+        # read once and treat a vanished /proc entry the same as a vanished pid. Still bounded at 5 s.
         for _ in range(50):  # orphan may sit as a zombie briefly until init reaps it
             try:
                 os.kill(pid, 0)
-                state = Path(f"/proc/{pid}/stat").read_text().split()[2] if Path(f"/proc/{pid}").exists() else "Z"
-            except ProcessLookupError:
+                state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+            except (ProcessLookupError, FileNotFoundError):
                 break
             if state == "Z":
                 break
