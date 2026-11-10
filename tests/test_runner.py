@@ -97,6 +97,9 @@ def alive(pid):
 class RunnerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        # Registered first so it runs last: after per-test cleanups (e.g. killing a run.lock holder),
+        # since Windows can't delete a file another live process still holds open.
+        self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name)
         git(self.repo, "init", "-q", "-b", "main")
         git(self.repo, "config", "user.name", "Test")
@@ -127,9 +130,6 @@ class RunnerTests(unittest.TestCase):
         lr.ensure_excludes(self.repo)
         self.store = loop_tasks.TaskStore(self.repo / "tasks" / "tasks.json")
         self.clock = FakeClock()
-
-    def tearDown(self):
-        self.tmp.cleanup()
 
     def scenario(self, *steps):
         (self.fake_dir / "scenario.json").write_text(json.dumps(list(steps)))
@@ -386,7 +386,7 @@ class RunnerTests(unittest.TestCase):
 class ReviewFixTests(unittest.TestCase):
     """Fable's T6 review findings, one test (or more) each. Borrows RunnerTests' fixture."""
 
-    setUp, tearDown = RunnerTests.setUp, RunnerTests.tearDown
+    setUp = RunnerTests.setUp
     scenario, calls, runner, task = RunnerTests.scenario, RunnerTests.calls, RunnerTests.runner, RunnerTests.task
 
     def set_loop(self, **kw):
@@ -555,7 +555,7 @@ class ReviewFixTests(unittest.TestCase):
 class HardeningTests(unittest.TestCase):
     """T8b (reviews/codex-core.md) runner items. Borrows RunnerTests' fixture."""
 
-    setUp, tearDown = RunnerTests.setUp, RunnerTests.tearDown
+    setUp = RunnerTests.setUp
     scenario, calls, runner, task = RunnerTests.scenario, RunnerTests.calls, RunnerTests.runner, RunnerTests.task
     set_loop, rows = ReviewFixTests.set_loop, ReviewFixTests.rows
 
@@ -611,6 +611,23 @@ class HardeningTests(unittest.TestCase):
         self.assertEqual(res["exit_code"], 0)
         self.assertEqual(self.task()["status"], "done")
         self.assertTrue(any(r["event"] == "recover" and r["outcome"] == "requeued" for r in self.rows()))
+
+    # T10w: run() closes loop.jsonl on every exit (Windows can't rotate/delete a file left open)
+    def test_run_releases_loop_log_on_every_exit(self):
+        import logging
+        handlers = logging.getLogger("council_loop.jsonl." + str((self.repo / "logs").resolve())).handlers
+        self.store.add("Add a", verify=[PASS])
+        self.scenario(GOAL_DONE)
+        self.assertEqual(self.runner().run()["exit_code"], 0)
+        self.assertEqual(handlers, [])
+        self.set_loop(claude_bin=str(self.fake_dir / "missing-claude"))  # crash path
+        self.store.add("Add b", verify=[PASS])
+        self.assertIn("runner crashed", self.runner().run()["stop_reason"])
+        self.assertEqual(handlers, [])
+        self.lock_file()  # refusal path (a manual cycle is running)
+        self.assertEqual(self.runner().run()["exit_code"], 2)
+        self.assertEqual(handlers, [])
+        self.assertTrue((self.repo / "logs" / "loop.jsonl").exists())
 
     def test_run_never_leaves_a_cycle_lock(self):
         self.store.add("Never finishes", verify=[PASS])
@@ -698,7 +715,7 @@ class HardeningTests(unittest.TestCase):
         pidfile.write_text(json.dumps({"pid": os.getpid(), "start": None}))
         # lr.Path pinned to the native class so a faked os.name can't make a WindowsPath on older Pythons.
         with mock.patch.object(lr.os, "name", "nt"), mock.patch.object(lr, "Path", type(pidfile)), \
-                mock.patch.object(lr.subprocess, "run") as run, mock.patch.object(lr.os, "killpg") as killpg:
+                mock.patch.object(lr.subprocess, "run") as run, mock.patch.object(lr.os, "killpg", create=True) as killpg:  # create: Windows os has no killpg
             self.assertEqual(lr.kill_stale_session(pidfile), "stale")
         run.assert_not_called()
         killpg.assert_not_called()
