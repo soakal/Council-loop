@@ -31,6 +31,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import council_state  # noqa: E402
+import loop_notify  # noqa: E402
 from council_state import validate_loop_mode  # noqa: E402
 from discover_tests import discover  # noqa: E402
 from loop_log import get_logger, redact, write_session_log  # noqa: E402
@@ -811,9 +812,8 @@ class Runner:
         self.escalate("blocked", self._task(task_id), reason)
 
     def escalate(self, event: str, task: dict | None, reason: str) -> None:
-        """Tell the owner. For now: append to <logs_dir>/escalations.md, once per task per event.
-
-        T9 plugs the NEXUS sender in here (the file stays the fallback).
+        """Tell the owner, once per task per event: a line in <logs_dir>/escalations.md, then a
+        NEXUS flag (loop_notify). A failed send adds an [undelivered] line and the run goes on.
         """
         stamp = self.now().strftime("%Y-%m-%dT%H:%M:%SZ")
         if task is not None:
@@ -825,6 +825,15 @@ class Runner:
         with (self.logs_dir / "escalations.md").open("a", encoding="utf-8") as fh:
             fh.write(line)
         self._ev("escalate", task["id"] if task else None, event, reason=reason[:300])
+        tid = task["id"] if task else "-"
+        try:
+            loop_notify.send_escalation(self.loop, event, f"{event}: task {tid}: {reason.splitlines()[0] if reason else ''}",
+                                        reason)
+        except Exception as exc:  # no key, network down, non-2xx: file log only, keep running
+            why = redact(str(exc))[:300]
+            with (self.logs_dir / "escalations.md").open("a", encoding="utf-8") as fh:
+                fh.write(f"- {stamp} [undelivered] task {tid}: {event} not sent to NEXUS: {why}\n")
+            self._ev("notify", task["id"] if task else None, "failed", reason=why)
 
     # ---------- startup ----------
 

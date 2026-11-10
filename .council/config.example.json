@@ -73,9 +73,9 @@
       ]
     },
     "notify": {
-      "enabled": true,
-      "telegram_token_secret": "NIGHTSHIFT_TELEGRAM_BOT_TOKEN",
-      "telegram_chat_secret": "NIGHTSHIFT_TELEGRAM_OWNER_ID"
+      "enabled": false,
+      "nexus_url": "",
+      "api_key_secret": "NEXUS_API_KEY"
     }
   }
 }

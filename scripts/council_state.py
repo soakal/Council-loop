@@ -95,9 +95,13 @@ DEFAULT_LOOP: dict[str, Any] = {
         ],
     },
     "notify": {
-        "enabled": True,
-        "telegram_token_secret": "NIGHTSHIFT_TELEGRAM_BOT_TOKEN",
-        "telegram_chat_secret": "NIGHTSHIFT_TELEGRAM_OWNER_ID",
+        # Off by default (personal infra, like brain_events); turn on in config.local.json.
+        "enabled": False,
+        # Escalations go to NEXUS (POST <nexus_url>/api/safety/flags); "" = env NEXUS_BASE_URL,
+        # else http://127.0.0.1:8000.
+        "nexus_url": "",
+        # Secret NAME (not value) fetched through loop.secrets.
+        "api_key_secret": "NEXUS_API_KEY",
     },
 }
 SECRETS_BACKENDS = ("command", "env", "infisical")
@@ -345,9 +349,11 @@ def validate_loop_block(loop: Any) -> None:
         raise ValueError("loop.notify must be an object")
     if not isinstance(notify.get("enabled"), bool):
         raise ValueError("loop.notify.enabled must be a boolean")
-    for key in ("telegram_token_secret", "telegram_chat_secret"):
-        if not _is_text(notify.get(key)):
-            raise ValueError(f"loop.notify.{key} must be a non-empty string")
+    url = notify.get("nexus_url")
+    if not isinstance(url, str) or (url and not url.startswith(("http://", "https://"))):
+        raise ValueError('loop.notify.nexus_url must be "" or an http(s):// URL')
+    if not _is_text(notify.get("api_key_secret")):
+        raise ValueError("loop.notify.api_key_secret must be a non-empty string")
 
 
 def validate_loop_mode(cfg: dict[str, Any]) -> list[str]:

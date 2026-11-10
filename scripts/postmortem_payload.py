@@ -21,6 +21,8 @@ happens to be on the machine driving the loop.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -169,7 +171,18 @@ def build_payload(root: Path) -> dict:
     return payload
 
 
-def _api_key() -> str | None:
+def _api_key(root: Path | None = None) -> str | None:
+    # 1. the configured secrets backend (loop.secrets, same as escalations), 2. env, 3. key file.
+    if root is not None:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import council_state
+            import loop_notify
+            with contextlib.redirect_stderr(io.StringIO()):
+                loop = council_state.load_config(root)["loop"]
+            return loop_notify.get_secret(loop["notify"]["api_key_secret"], loop["secrets"])
+        except Exception:
+            pass  # no config / backend unavailable: fall through to the old sources
     key = os.environ.get("NEXUS_API_KEY")
     if key:
         return key
@@ -191,7 +204,7 @@ def main() -> int:
     args = parser.parse_args()
     root = Path(args.root).resolve()
 
-    key = _api_key()
+    key = _api_key(root)
     if not key:
         print("council post-mortem skipped: no NEXUS_API_KEY (env or ~/.config/nexus/api_key)")
         return 0
