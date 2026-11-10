@@ -105,7 +105,7 @@ templates) if it doesn't already exist.
 `hooks/hooks.json` (this plugin's own hook manifest — plugins don't use `.claude/settings.json`
 for hooks, only for the `agent`/`subagentStatusLine` keys) wires two hooks, each a real
 script under `scripts/hooks/` rather than an inline command, so they're directly testable
-(`echo '<payload-json>' | bash scripts/hooks/<name>.sh`):
+(`echo '<payload-json>' | python3 scripts/hooks/guard.py`; tests in `tests/test_guard.py`):
 - **PostToolUse** (`validate_after_edit.sh`, matcher `Edit|Write|MultiEdit`): after a change
   to *this plugin's own* `.council/config*.json`, `agents/*.md`, or `commands/*.md` (scoped
   to `$CLAUDE_PLUGIN_ROOT`, the real env var Claude Code exports to hook processes — never
@@ -113,7 +113,8 @@ script under `scripts/hooks/` rather than an inline command, so they're directly
   config/schema/example or frontmatter drift surfaces immediately instead of at the next
   failed cycle. A real failure exits non-zero (never suppressed) so it's visible; a
   non-matching file is a silent no-op.
-- **PreToolUse** (`guard_state_and_secrets.sh`, matcher `Edit|Write|MultiEdit`): denies
+- **PreToolUse** (`guard.py`, stdlib Python, matcher `Bash|Read|Grep|Glob|Edit|Write|MultiEdit|NotebookEdit`;
+  fails closed on an unparseable payload): base rules deny
   (via `permissionDecision: deny`, never a raw non-zero exit) two things the rest of this
   file already states as policy, in **any** project this plugin is used from — a direct
   Edit/Write/MultiEdit on `.council/state/history.jsonl` (must only be written via
@@ -123,6 +124,12 @@ script under `scripts/hooks/` rather than an inline command, so they're directly
   `git ls-files` reports as tracked — a bare mention of either concept in prose is left
   alone. Writing the same into `.council/config.local.json` (gitignored) is exactly what
   that file is for.
+- **Strict deny-list** (same `guard.py`, on only with `--strict` — passed by this repo's own
+  tracked `.claude/settings.json` — or env `COUNCIL_LOOP_RUN=1`): blocks `rm -rf` variants,
+  force pushes, pushes to / commits on `main`/`master`, disk tools, credential files through
+  Bash or any file tool (matched on the resolved real path), `infisical secrets set/delete`,
+  and, with `COUNCIL_LOOP_RUN=1` only, edits to `tasks/tasks.json`, `.council/config.json`,
+  `.council/config.local.json` and `.council/state/run-journal.json`. Advisory only — see PLAN.md §3.
 
 ## Rules for the loop (important)
 

@@ -29,7 +29,7 @@ required_files=(
   "$repo_root/scripts/validate.sh"
   "$repo_root/scripts/postmortem_payload.py"
   "$repo_root/scripts/hooks/validate_after_edit.sh"
-  "$repo_root/scripts/hooks/guard_state_and_secrets.sh"
+  "$repo_root/scripts/hooks/guard.py"
   "$repo_root/skills/docs-sync/SKILL.md"
   "$repo_root/skills/loop-log-triage/SKILL.md"
   "$repo_root/skills/council-loop-status-check/SKILL.md"
@@ -103,8 +103,7 @@ bash -n "$repo_root/set-target.sh"
 bash -n "$repo_root/start-council.sh"
 bash -n "$repo_root/run-loop.sh"
 bash -n "$repo_root/scripts/hooks/validate_after_edit.sh"
-bash -n "$repo_root/scripts/hooks/guard_state_and_secrets.sh"
-python3 -m py_compile "$repo_root/scripts/council_state.py" "$repo_root/scripts/council_doctor.py" "$repo_root/scripts/discover_tests.py" "$repo_root/scripts/postmortem_payload.py"
+python3 -m py_compile "$repo_root/scripts/council_state.py" "$repo_root/scripts/council_doctor.py" "$repo_root/scripts/discover_tests.py" "$repo_root/scripts/postmortem_payload.py" "$repo_root/scripts/hooks/guard.py"
 python3 "$repo_root/scripts/discover_tests.py" "$repo_root" >/dev/null
 
 tmp_root="$(mktemp -d)"

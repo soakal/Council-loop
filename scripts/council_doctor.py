@@ -79,7 +79,7 @@ def main() -> int:
         "scripts/validate.sh",
         "scripts/postmortem_payload.py",
         "scripts/hooks/validate_after_edit.sh",
-        "scripts/hooks/guard_state_and_secrets.sh",
+        "scripts/hooks/guard.py",
         "skills/docs-sync/SKILL.md",
         "skills/loop-log-triage/SKILL.md",
         "skills/council-loop-status-check/SKILL.md",
