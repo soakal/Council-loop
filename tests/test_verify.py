@@ -167,6 +167,53 @@ class GateTests(unittest.TestCase):
         else:
             self.fail(f"child {pid} still running")
 
+    def edit_task(self, **fields):
+        """Hand-edit tasks.json the way a model could."""
+        data = json.loads(self.store.path.read_text())
+        data["tasks"][0].update(fields)
+        self.store.path.write_text(json.dumps(data))
+
+    def test_tamper_plus_dirty_tree_still_blocked(self):
+        task, frozen = self.claim()
+        commit(self.repo, "app.py", "x = 5\n")
+        self.edit_task(verify=["true"], allow_test_changes=True)
+        (self.repo / "junk.txt").write_text("untracked\n")
+        res = lr.gate(self.repo, task, self.cfg, frozen, time.monotonic() + 60, task_store=self.store)
+        self.assertEqual(res["status"], "blocked")
+        self.assertIn("verification inputs changed", res["reason"])
+
+    def test_status_set_done_by_hand_ends_blocked(self):
+        task, frozen = self.claim(verify=[FAIL])
+        commit(self.repo, "app.py", "x = 6\n")
+        self.edit_task(status="done")
+        res = self.finish(task, frozen)
+        self.assertEqual(res["status"], "blocked")
+        t = self.store.load()[0]
+        self.assertEqual(t["status"], "blocked")
+        self.assertIn("not claimed", t["reason"])
+
+    def test_attempts_edited_by_hand_blocked(self):
+        task, frozen = self.claim()
+        commit(self.repo, "app.py", "x = 7\n")
+        self.edit_task(attempts=2, branch="task/other")
+        res = lr.gate(self.repo, task, self.cfg, frozen, time.monotonic() + 60, task_store=self.store)
+        self.assertEqual(res["status"], "blocked")
+        self.assertIn("attempts, branch", res["reason"])
+
+    def test_approval_does_not_cover_later_test_edits(self):
+        task, frozen = self.claim()
+        commit(self.repo, "tests/test_app.py", "assert 1\n")
+        self.assertEqual(self.finish(task, frozen)["status"], "blocked")
+        lr.approve_tests(self.store, task["id"], "reviewed by owner", self.repo)
+        self.assertEqual(self.store.load()[0]["tests_approved"]["sha"], git(self.repo, "rev-parse", "HEAD"))
+        task, frozen = self.claim()
+        git(self.repo, "rm", "-q", "tests/test_app.py")
+        git(self.repo, "commit", "-q", "-m", "drop test after approval")
+        res = self.finish(task, frozen)
+        self.assertEqual(res["status"], "blocked")
+        self.assertIn("test change needs review: tests/test_app.py", res["reason"])
+        self.assertEqual(self.store.load()[0]["status"], "blocked")
+
     def test_clamp_respects_deadline(self):
         now = time.monotonic()
         self.assertLessEqual(lr.clamp(1800, now + 5), 5)

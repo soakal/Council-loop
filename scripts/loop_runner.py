@@ -102,7 +102,8 @@ def run_command(cmd: str, cwd, timeout: float) -> tuple[bool, int | None, str]:
             timed_out = True
         if timed_out:
             _kill_tree(proc)
-            proc.wait()
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                proc.wait(timeout=10)
             code = None
         elif os.name != "nt":
             # Also clear anything the command left running in its group.
@@ -147,6 +148,8 @@ def _snapshot(task: dict, cfg: dict) -> dict:
         "acceptance": task.get("acceptance") or "",
         "allow_test_changes": bool(task.get("allow_test_changes")),
         "tests_approved": task.get("tests_approved"),
+        "attempts": task.get("attempts", 0),
+        "branch": task.get("branch"),
         "test_commands": list(cfg.get("test_commands") or []),
         "caps": {k: loop.get(k) for k in CAP_KEYS},
         "protected_paths": list(loop.get("protected_paths") or []),
@@ -173,6 +176,8 @@ def inputs_tampered(task_store, cfg: dict, frozen: dict) -> str | None:
     task = next((t for t in task_store.load() if t["id"] == frozen["task_id"]), None)
     if task is None:
         return f"verification inputs changed: task {frozen['task_id']} is gone"
+    if task["status"] != "claimed":
+        return f"verification inputs changed: task status is {task['status']!r}, not claimed"
     now = _snapshot(task, cfg)
     changed = [k for k in now if now[k] != frozen.get(k)]
     return f"verification inputs changed: {', '.join(changed)}" if changed else None
@@ -262,19 +267,24 @@ def gate(repo, task: dict, cfg: dict, frozen: dict, deadline: float | None, task
     if not branch:
         return result("blocked", "task has no branch")
 
-    dirty = _dirty(repo)
-    if dirty:
-        return result(fail, "uncommitted changes in worktree: " + "; ".join(dirty[:10]))
+    # Tamper check first, so a dirty tree can't turn a tampered task into a plain retry.
     if task_store is not None:
         reason = inputs_tampered(task_store, cfg, frozen)
         if reason:
             return result("blocked", reason)
+    dirty = _dirty(repo)
+    if dirty:
+        return result(fail, "uncommitted changes in worktree: " + "; ".join(dirty[:10]))
     if run_git(repo, "rev-parse", "--abbrev-ref", "HEAD") != branch:
         run_git(repo, "switch", branch)
 
-    approved = frozen.get("allow_test_changes") or frozen.get("tests_approved")
-    if not approved:
-        hits = protected_changes(repo, base, branch, frozen.get("protected_paths") or [])
+    if not frozen.get("allow_test_changes"):
+        # An approval covers only the branch as it was when approved; later test edits need a new one.
+        origin = (frozen.get("tests_approved") or {}).get("sha") or base
+        try:
+            hits = protected_changes(repo, origin, branch, frozen.get("protected_paths") or [])
+        except GitError as exc:
+            return result("blocked", f"test approval origin unusable: {exc}")
         if hits:
             return result("blocked", "test change needs review: " + ", ".join(hits))
 
@@ -290,6 +300,16 @@ def gate(repo, task: dict, cfg: dict, frozen: dict, deadline: float | None, task
 
 
 # ---------- merge ----------
+
+def _abort_merge(repo, base_head: str) -> None:
+    """merge --abort, then confirm base is back at base_head with no merge in progress."""
+    run_git(repo, "merge", "--abort", check=False)
+    head = run_git(repo, "rev-parse", "HEAD", check=False)
+    pending = run_git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD", check=False)
+    if head != base_head or pending:
+        raise GitError(["merge", "--abort"], None,
+                       f"abort did not restore base (HEAD {head[:12]}, MERGE_HEAD {pending[:12] or 'none'})")
+
 
 def merge_task(repo, base: str, branch: str, verified_sha: str, checks: list[str],
                deadline: float | None, task_id: str | None = None,
@@ -319,38 +339,66 @@ def merge_task(repo, base: str, branch: str, verified_sha: str, checks: list[str
     try:
         run_git(repo, *args)
     except GitError as exc:
-        run_git(repo, "merge", "--abort", check=False)
-        return result("blocked", f"merge conflict: {exc.stderr.strip()[:500]}")
+        conflict = run_git(repo, "diff", "--name-only", "--diff-filter=U", check=False)
+        _abort_merge(repo, base_head)
+        kind = "merge conflict" if conflict else "merge failed"
+        return result("blocked", f"{kind}: {exc.stderr.strip()[:500]}")
     if moved:
         # Base moved since the branch was cut: verify the merged tree before committing.
         try:
             ok, tail = _run_checks(repo, checks, verify_timeout, deadline)
         except DeadlineReached:
-            run_git(repo, "merge", "--abort", check=False)
+            _abort_merge(repo, base_head)
             raise
         if not ok:
-            run_git(repo, "merge", "--abort", check=False)
+            _abort_merge(repo, base_head)
             return result("retry", f"verify failed on merged tree: {tail}")
-        run_git(repo, "commit", "-m", msg)
+        try:
+            run_git(repo, "commit", "-m", msg)
+        except GitError as exc:
+            _abort_merge(repo, base_head)
+            return result("blocked", f"merge commit failed: {exc.stderr.strip()[:500]}")
     return result("done", "", run_git(repo, "rev-parse", "HEAD"))
 
 
 # ---------- task store bookkeeping ----------
 
-def approve_tests(store, task_id: str, reason: str) -> dict:
-    """Owner/reviewer release of a protected test change (CLI: loop resume --approve-tests)."""
+def approve_tests(store, task_id: str, reason: str, repo=None) -> dict:
+    """Owner/reviewer release of a protected test change (CLI: loop resume --approve-tests).
+
+    Approves the branch tip as it is now; protected edits after that sha block again.
+    repo defaults to the tasks file's folder (it lives inside the project repo in loop mode).
+    """
+    repo = repo if repo is not None else store.path.parent
     reason = (reason or "").strip()
     if not reason or "\n" in reason:
         raise TaskStoreError("approval needs a one-line reason")
-    store.add_note(task_id, f"tests approved: {reason}")
-    task = store.update(task_id, tests_approved={"reason": reason, "at": _now()})
+    task = next((t for t in store.load() if t["id"] == task_id), None)
+    if task is None or not task.get("branch"):
+        raise TaskStoreError(f"task {task_id!r} has no branch to approve")
+    sha = run_git(repo, "rev-parse", task["branch"])
+    store.add_note(task_id, f"tests approved: {reason} (at {sha[:12]})")
+    task = store.update(task_id, tests_approved={"reason": reason, "at": _now(), "sha": sha})
     if task["status"] == "blocked":
         task = store.update(task_id, status="pending", reason=None)
     return task
 
 
 def apply_result(store, task_id: str, res: dict, max_attempts: int) -> dict:
-    """Write a gate/merge result to the task. retry/failed use up one attempt."""
+    """Write a gate/merge result to the task. retry/failed use up one attempt.
+
+    If the task was hand-edited into a state the result can't follow (e.g. "done"),
+    it is force-blocked instead of left as is.
+    """
+    try:
+        return _apply_result(store, task_id, res, max_attempts)
+    except TaskStoreError as exc:
+        if "not allowed" not in str(exc):
+            raise
+        return store.force_block(task_id, f"{res.get('reason') or res['status']} ({exc})")
+
+
+def _apply_result(store, task_id: str, res: dict, max_attempts: int) -> dict:
     task = next(t for t in store.load() if t["id"] == task_id)
     status = res["status"]
     if status == "done":

@@ -309,6 +309,13 @@ class TaskStore:
             task.update(status="pending", owner=None, claimed_at=None, updated_at=_now())
         return task
 
+    def force_block(self, task_id: str, reason: str) -> dict:
+        """Runner-only: set blocked from ANY status (incl. a hand-edited "done"), skipping TRANSITIONS."""
+        with self._mutate() as data:
+            task = self._get(data, task_id)
+            task.update(status="blocked", reason=reason, updated_at=_now())
+        return task
+
     def add_note(self, task_id: str, text: str) -> dict:
         """Append a timestamped note to a task."""
         with self._mutate() as data:

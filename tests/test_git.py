@@ -109,6 +109,27 @@ class GitTests(unittest.TestCase):
         self.assertEqual(git(self.repo, "rev-parse", "dev"), base_before)
         self.assertEqual(git(self.repo, "status", "--porcelain"), "")
 
+    def test_failed_merge_commit_aborted_and_blocked(self):
+        self.branch()
+        commit(self.repo, "a.txt", "a\n")
+        git(self.repo, "switch", "-q", "dev")
+        commit(self.repo, "b.txt", "b\n")
+        base_before = git(self.repo, "rev-parse", "dev")
+        git(self.repo, "switch", "-q", "task/t001-add-the-widget")
+        hook = self.repo / ".git" / "hooks" / "pre-commit"  # makes the post-re-verify commit fail
+        hook.write_text("#!/bin/sh\nexit 1\n")
+        hook.chmod(0o755)
+        _, res = self.merge([PASS])
+        self.assertEqual(res["status"], "blocked")
+        self.assertIn("merge commit failed", res["reason"])
+        self.assertEqual(git(self.repo, "rev-parse", "dev"), base_before)
+        self.assertEqual(git(self.repo, "status", "--porcelain"), "")
+        self.assertFalse((self.repo / ".git" / "MERGE_HEAD").exists())
+
+    def test_abort_merge_raises_if_base_not_restored(self):
+        with self.assertRaises(lr.GitError):
+            lr._abort_merge(self.repo, "0" * 40)
+
     def test_run_git_error_has_command_and_stderr(self):
         with self.assertRaises(lr.GitError) as cm:
             lr.run_git(self.repo, "rev-parse", "no-such-ref")
