@@ -38,6 +38,7 @@ from loop_tasks import TaskStore, TaskStoreError, atomic_write_json, try_lock, u
 
 PROTECTED_BASE_BRANCHES = ("main", "master")
 JOURNAL = Path(".council") / "state" / "run-journal.json"
+SESSION_PID = Path(".council") / "state" / "session.pid"  # the running session / check (kill_stale_session)
 TAIL_CHARS = 2000  # how much check output is kept in a task's reason
 # Loop settings frozen at claim time; a change mid-task blocks it ("verification inputs changed").
 CAP_KEYS = ("max_attempts", "max_sessions", "max_hours", "session_timeout_minutes", "verify_timeout_minutes",
@@ -89,12 +90,42 @@ def _kill_tree(proc: subprocess.Popen) -> None:
         proc.kill()
 
 
+def _proc_start(pid: int) -> str | None:
+    """Process start time (field 22 of /proc/<pid>/stat), to tell a reused pid apart; None if unknown."""
+    # shortcut: no /proc on macOS -> start is always None, so the pid-reuse guard is off there;
+    # upgrade with `ps -o lstart= -p <pid>` if loop runs on macOS become common.
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return None
+
+
+def _job_create(proc: subprocess.Popen):
+    """Windows: put proc in a kill-on-close Job Object. None elsewhere or on any failure."""
+    if os.name != "nt":
+        return None
+    job = None
+    try:
+        import win_job
+        job = win_job.create()
+        win_job.assign(job, proc)
+        return job
+    except Exception as exc:  # never refuse to run: fall back to taskkill-only cleanup
+        if job is not None:
+            win_job.close(job)  # assign failed: free the (empty) job's handle
+        print(f"[loop] warning: Job Object unavailable ({exc}); stray child processes may survive",
+              file=sys.stderr)
+        return None
+
+
 def _spawn(cmd, cwd, timeout: float, env=None, shell: bool = False,
-           merge: bool = False) -> tuple[int | None, str, str]:
+           merge: bool = False, pidfile: Path | None = None) -> tuple[int | None, str, str]:
     """Start cmd in its own process group; kill + reap the whole tree on timeout.
 
     Returns (exit_code or None on timeout, stdout, stderr); merge=True folds stderr into
     stdout. Output goes to temp files, not pipes, so a stray grandchild holding a pipe can never hang us.
+    pidfile: {"pid", "start"} is kept there while the command runs, so a later run can kill the
+    tree if this runner is SIGKILLed (kill_stale_session).
     """
     kwargs: dict[str, Any] = {}
     if os.name == "nt":
@@ -105,7 +136,11 @@ def _spawn(cmd, cwd, timeout: float, env=None, shell: bool = False,
         proc = subprocess.Popen(cmd, shell=shell, cwd=str(cwd), stdout=out,
                                 stderr=subprocess.STDOUT if merge else err,
                                 stdin=subprocess.DEVNULL, env=env, **kwargs)
+        # Known small race: a grandchild started before the assign is not in the job.
+        job = _job_create(proc)
         try:
+            if pidfile is not None:
+                atomic_write_json(pidfile, {"pid": proc.pid, "start": _proc_start(proc.pid)})
             code = proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             _kill_tree(proc)
@@ -123,13 +158,67 @@ def _spawn(cmd, cwd, timeout: float, env=None, shell: bool = False,
                 # Also clear anything the command left running in its group.
                 with contextlib.suppress(ProcessLookupError, PermissionError):
                     os.killpg(proc.pid, signal.SIGKILL)
+        finally:
+            if job is not None:
+                import win_job
+                win_job.close(job)  # kills whatever the command left running (Windows)
+            if pidfile is not None:
+                Path(pidfile).unlink(missing_ok=True)  # command ended and its group is cleared
         out.seek(0)
         err.seek(0)
         return (code, out.read().decode("utf-8", errors="replace"),
                 err.read().decode("utf-8", errors="replace"))
 
 
-def run_command(cmd: str, cwd, timeout: float) -> tuple[bool, int | None, str]:
+def _group_alive(pgid: int) -> bool:
+    """POSIX: True while the process group has a member that is not just its zombie leader."""
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    # shortcut: a zombie leader counts as gone even if a member lingers; SIGKILL already hit the group.
+    try:
+        return Path(f"/proc/{pgid}/stat").read_text().rsplit(")", 1)[1].split()[0] != "Z"
+    except (OSError, IndexError):
+        return True
+
+
+def kill_stale_session(pidfile: Path) -> str | None:
+    """Kill a session / verify tree a SIGKILLed runner left behind (from its pidfile).
+
+    Returns None (no pidfile), "stale" (nothing of ours running; file removed) or "killed".
+    Raises RuntimeError when the tree is still alive after 10 s.
+    """
+    try:
+        info = json.loads(Path(pidfile).read_text(encoding="utf-8"))
+        pid = int(info["pid"])
+    except FileNotFoundError:
+        return None
+    except (ValueError, KeyError, TypeError, OSError):
+        Path(pidfile).unlink(missing_ok=True)  # unreadable: nothing we can safely kill
+        return "stale"
+    if os.name == "nt":
+        # The kill-on-close Job Object died with the runner and took the tree with it; a pid alone
+        # can't prove identity on Windows, so never taskkill it (it may be reused by now).
+        Path(pidfile).unlink(missing_ok=True)
+        return "stale"
+    start, now_start = info.get("start"), _proc_start(pid)
+    if not _group_alive(pid) or (start and now_start and start != now_start):
+        Path(pidfile).unlink(missing_ok=True)  # gone, or the pid now belongs to someone else
+        return "stale"
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(pid, signal.SIGKILL)
+    for _ in range(100):
+        if not _group_alive(pid):
+            Path(pidfile).unlink(missing_ok=True)
+            return "killed"
+        time.sleep(0.1)
+    raise RuntimeError(f"previous session still running (process group {pid})")
+
+
+def run_command(cmd: str, cwd, timeout: float, pidfile: Path | None = None) -> tuple[bool, int | None, str]:
     """Run one verify command via the platform shell in its own process group.
 
     On timeout the whole tree is killed and reaped. Returns (ok, exit_code, output_tail);
@@ -137,7 +226,7 @@ def run_command(cmd: str, cwd, timeout: float) -> tuple[bool, int | None, str]:
     """
     if timeout <= 0:
         return False, None, "no time left before the run deadline"
-    code, out, err = _spawn(cmd, cwd, timeout, shell=True, merge=True)
+    code, out, err = _spawn(cmd, cwd, timeout, shell=True, merge=True, pidfile=pidfile)
     tail = (out + err)[-TAIL_CHARS:]
     if code is None:
         tail += f"\n[timed out after {timeout:.0f}s: {cmd}]"
@@ -178,6 +267,7 @@ def _snapshot(task: dict, cfg: dict) -> dict:
         "attempts": task.get("attempts", 0),
         "branch": task.get("branch"),
         "test_commands": list(cfg.get("test_commands") or []),
+        "base_branch": loop.get("base_branch"),
         "caps": {k: loop.get(k) for k in CAP_KEYS},
         "protected_paths": list(loop.get("protected_paths") or []),
     }
@@ -208,6 +298,16 @@ def inputs_tampered(task_store, cfg: dict, frozen: dict) -> str | None:
     now = _snapshot(task, cfg)
     changed = [k for k in now if now[k] != frozen.get(k)]
     return f"verification inputs changed: {', '.join(changed)}" if changed else None
+
+
+def _frozen_base(frozen: dict, cfg: dict) -> str | None:
+    """Base branch as frozen at claim time; config only for a snapshot taken before it was frozen."""
+    return frozen["base_branch"] if "base_branch" in frozen else (cfg.get("loop") or {}).get("base_branch")
+
+
+def _frozen_checks(frozen: dict, task: dict, cfg: dict, repo) -> list[str] | None:
+    """Checks as resolved at claim time; never re-discovered after the model has edited the repo."""
+    return frozen["checks"] if "checks" in frozen else resolve_checks(task, cfg, repo)
 
 
 def resolve_checks(task: dict, cfg: dict, repo) -> list[str] | None:
@@ -244,15 +344,47 @@ def _glob_match(path: str, glob: str) -> bool:
     return glob.startswith("**/") and fnmatch.fnmatchcase(path, glob[3:])
 
 
+PKG_TEST_KEYS = ("scripts", "jest", "mocha")  # package.json keys that can change what `npm test` runs
+_UNPARSEABLE = object()  # never equal to anything, so an unreadable side always counts as a change
+
+
+def _test_section(repo, rev: str, path: str):
+    """The part of a manifest that defines how tests run: package.json `scripts`/`jest`/`mocha`, pyproject `tool.pytest`."""
+    try:
+        text = run_git(repo, "show", f"{rev}:{path}")
+        if path.rsplit("/", 1)[-1] == "package.json":
+            data = json.loads(text)
+            return {k: data.get(k) for k in PKG_TEST_KEYS} if isinstance(data, dict) else _UNPARSEABLE
+        import tomllib  # Python 3.11+; ImportError -> any pyproject change counts
+        return (tomllib.loads(text).get("tool") or {}).get("pytest")
+    except (GitError, ValueError, ImportError, AttributeError):  # tomllib/json errors are ValueErrors
+        return _UNPARSEABLE
+
+
 def protected_changes(repo, base: str, branch: str, globs: list[str]) -> list[str]:
-    """Existing protected files modified or deleted on branch vs merge-base (new files are fine)."""
+    """Existing protected files modified or deleted on branch vs merge-base (new files are fine).
+
+    package.json / pyproject.toml are only hits when their test section changed, so dependency edits pass.
+    """
     mb = run_git(repo, "merge-base", base, branch)
     out = run_git(repo, "diff", "--name-status", "--no-renames", mb, branch)
     hits = []
     for line in out.splitlines():
         status, _, path = line.partition("\t")
-        if status[:1] in ("M", "D", "T") and any(_glob_match(path, g) for g in globs):
+        if status[:1] not in ("M", "D", "T"):
+            continue
+        if any(_glob_match(path, g) for g in globs):
             hits.append(path)
+        elif path.rsplit("/", 1)[-1] in ("package.json", "pyproject.toml"):
+            old, new = _test_section(repo, mb, path), _test_section(repo, branch, path)
+            if old is _UNPARSEABLE or new is _UNPARSEABLE or old != new:
+                if path.endswith("pyproject.toml"):
+                    section = "tool.pytest"
+                elif old is _UNPARSEABLE or new is _UNPARSEABLE:
+                    section = "scripts"
+                else:
+                    section = ", ".join(k for k in PKG_TEST_KEYS if old[k] != new[k])
+                hits.append(f"{path} ({section})")
     return hits
 
 
@@ -267,7 +399,7 @@ def _run_checks(repo, checks: list[str], timeout: float, deadline: float | None)
         t = clamp(timeout, deadline)
         if t <= 0:
             raise DeadlineReached("run deadline reached before checks finished")
-        ok, code, tail = run_command(cmd, repo, t)
+        ok, code, tail = run_command(cmd, repo, t, pidfile=Path(repo) / SESSION_PID)
         if not ok:
             if deadline is not None and time.monotonic() >= deadline:
                 raise DeadlineReached("run deadline reached during checks")
@@ -284,12 +416,12 @@ def gate(repo, task: dict, cfg: dict, frozen: dict, deadline: float | None, task
     """
     def result(status, reason="", sha=None, tail=""):
         _log(log, "gate", task["id"], status, reason=reason[:200], verified_sha=sha)
-        return {"status": status, "reason": reason, "verified_sha": sha, "output_tail": tail}
+        return {"status": status, "reason": reason, "verified_sha": sha, "output_tail": redact(tail)}
 
     caps = frozen.get("caps") or {}
     max_attempts = caps.get("max_attempts") or 3
     fail = _next_fail_status(task.get("attempts", 0), max_attempts)
-    base = (cfg.get("loop") or {}).get("base_branch")
+    base = _frozen_base(frozen, cfg)
     branch = task.get("branch")
     if not branch:
         return result("blocked", "task has no branch")
@@ -315,7 +447,7 @@ def gate(repo, task: dict, cfg: dict, frozen: dict, deadline: float | None, task
         if hits:
             return result("blocked", "test change needs review: " + ", ".join(hits))
 
-    checks = frozen.get("checks") or resolve_checks(task, cfg, repo)
+    checks = _frozen_checks(frozen, task, cfg, repo)
     if not checks:
         return result("blocked", "no runnable check")
     timeout = (caps.get("verify_timeout_minutes") or 30) * 60
@@ -420,6 +552,7 @@ def apply_result(store, task_id: str, res: dict, max_attempts: int) -> dict:
     If the task was hand-edited into a state the result can't follow (e.g. "done"),
     it is force-blocked instead of left as is.
     """
+    res = {**res, "reason": redact(res.get("reason") or "")}  # check output can carry secrets
     try:
         return _apply_result(store, task_id, res, max_attempts)
     except TaskStoreError as exc:
@@ -453,8 +586,8 @@ def finish_task(repo, store, task: dict, cfg: dict, frozen: dict, deadline: floa
         apply_result(store, task["id"], res, max_attempts)
         return res
     store.update(task["id"], verified_sha=res["verified_sha"])
-    checks = frozen.get("checks") or resolve_checks(task, cfg, repo) or []
-    merged = merge_task(repo, cfg["loop"]["base_branch"], task["branch"], res["verified_sha"], checks,
+    checks = _frozen_checks(frozen, task, cfg, repo) or []
+    merged = merge_task(repo, _frozen_base(frozen, cfg), task["branch"], res["verified_sha"], checks,
                         deadline, task_id=task["id"],
                         verify_timeout=(caps.get("verify_timeout_minutes") or 30) * 60, log=log)
     merged["verified_sha"] = res["verified_sha"]
@@ -672,6 +805,7 @@ class Runner:
         return sha
 
     def _block(self, task_id: str, reason: str) -> None:
+        reason = redact(reason)
         apply_result(self.store, task_id, {"status": "blocked", "reason": reason}, 1)
         self._ev("task", task_id, "blocked", reason=reason[:300])
         self.escalate("blocked", self._task(task_id), reason)
@@ -698,11 +832,37 @@ class Runner:
         errors = list(validate_loop_mode(cfg))
         if not cfg["loop"].get("base_branch"):
             errors.append("loop.base_branch is not set -- run `loop init` first")
+        if not any(shutil.which(n) for n in ("python3", "python", "py")):
+            errors.append("no python3 / python / py on PATH -- the guard hook cannot run")
         missing = unexcluded_paths(self.repo, cfg)
         if missing:
             errors.append("runtime paths are not git-excluded (" + ", ".join(missing)
                           + ") -- run `loop init` first")
         return errors
+
+    def _locked_preflight(self) -> str | None:
+        """Under run.lock, before _recover touches anything. A refusal reason (exit 2) or None.
+
+        A fresh cycle.lock with no claimed task is a manual /council-cycle (it never takes run.lock);
+        with a claimed task it is a crashed runner's, and recovery handles it. Then any session a
+        SIGKILLed runner left running is killed, so recovery never stashes / switches under it.
+        """
+        lock_path = self.state / "cycle.lock"
+        try:
+            ts = json.loads(lock_path.read_text(encoding="utf-8"))["ts"]
+            age_min = (datetime.now(timezone.utc) - council_state._parse_utc_ts(ts)).total_seconds() / 60
+        except (OSError, ValueError, KeyError, TypeError):
+            age_min = None
+        if age_min is not None and age_min < council_state.STALE_LOCK_MINUTES \
+                and not any(t["status"] == "claimed" for t in self.store.load()):
+            return (f"a manual /council-cycle appears to be running (cycle.lock from {ts}); "
+                    f"wait for it or delete {lock_path}")
+        try:
+            if kill_stale_session(self.repo / SESSION_PID) == "killed":
+                self._ev("recover", None, "session_killed")
+        except RuntimeError as exc:
+            return str(exc)
+        return None
 
     def _recover(self, cfg: dict) -> None:
         """Crash recovery under the run lock: merged-but-unrecorded -> done; claimed -> pending/blocked."""
@@ -776,6 +936,14 @@ class Runner:
         self.logs_dir = self.repo / loop["logs_dir"]
         self.log = get_logger(self.logs_dir, loop["log_max_bytes"], loop["log_backups"])
         self.store = TaskStore(self.repo / loop["tasks_file"])
+        try:
+            refusal = self._locked_preflight()
+        except Exception as exc:  # e.g. an unreadable tasks file: refuse, don't leave run.lock held
+            refusal = f"startup check failed: {type(exc).__name__}: {exc}"
+        if refusal:
+            print(f"loop run: {refusal}", file=sys.stderr)
+            unlock(lock)
+            return {"exit_code": 2, "stop_reason": refusal, "sessions": 0, "counts": {}}
         run_start = self.now().strftime("%Y-%m-%dT%H:%M:%SZ")
         stop = None
         old_term = None
@@ -819,6 +987,7 @@ class Runner:
                 signal.signal(signal.SIGTERM, old_term)
             if self.end_hooks:
                 self._end_of_run(run_start)
+            (self.state / "cycle.lock").unlink(missing_ok=True)  # a clean exit never leaves one behind
             unlock(lock)
 
     def _attempt_guarded(self, task: dict) -> str | None:
@@ -873,6 +1042,9 @@ class Runner:
             self.store.update(tid, branch=branch)
         task = self._task(tid)
         frozen = freeze_claimed(self.repo, task, cfg)
+        if not frozen["checks"]:  # nothing to gate with: don't spend a session on it
+            self._block(tid, "no runnable check -- add --verify to the task or test_commands to the config")
+            return None
         self.current = (tid, frozen)
         self._set_goal(task)
         self._ev("attempt", tid, "start", branch=branch, attempt=task.get("attempts", 0) + 1)
@@ -967,7 +1139,7 @@ class Runner:
         self.sessions += 1
         start = self.clock()
         t0 = time.monotonic()
-        code, out, err = _spawn(argv, self.repo, timeout, env=env)
+        code, out, err = _spawn(argv, self.repo, timeout, env=env, pidfile=self.repo / SESSION_PID)
         duration = max(self.clock() - start, time.monotonic() - t0)
         data = _parse_session_json(out)
         result = data.get("result") if isinstance(data.get("result"), str) else ""

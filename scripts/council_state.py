@@ -77,6 +77,11 @@ DEFAULT_LOOP: dict[str, Any] = {
         "tox.ini",
         "scripts/validate.sh",
         ".github/workflows/**",
+        "**/jest.config.*",
+        "**/vitest.config.*",
+        "**/playwright.config.*",
+        "**/.mocharc*",
+        "noxfile.py",
     ],
     "secrets": {
         "backend": "command",

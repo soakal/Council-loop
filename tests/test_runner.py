@@ -11,7 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -550,6 +550,188 @@ class ReviewFixTests(unittest.TestCase):
             self.runner().run()
         self.assertEqual(self.clock.slept, [60])
         self.assertEqual(self.task()["status"], "done")
+
+
+class HardeningTests(unittest.TestCase):
+    """T8b (reviews/codex-core.md) runner items. Borrows RunnerTests' fixture."""
+
+    setUp, tearDown = RunnerTests.setUp, RunnerTests.tearDown
+    scenario, calls, runner, task = RunnerTests.scenario, RunnerTests.calls, RunnerTests.runner, RunnerTests.task
+    set_loop, rows = ReviewFixTests.set_loop, ReviewFixTests.rows
+
+    def lock_file(self, minutes_ago=0):
+        ts = (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        path = self.repo / ".council" / "state" / "cycle.lock"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"pid": 1, "cycle": 1, "ts": ts}))
+        return path
+
+    # 7. no runnable check: blocked before any session
+    def test_no_check_blocked_without_a_session(self):
+        self.store.add("Add a")  # no verify, no test_commands, nothing discoverable in the repo
+        self.scenario(GOAL_DONE)
+        res = self.runner().run()
+        self.assertEqual(res["sessions"], 0)
+        self.assertEqual(self.calls(), 0)
+        t = self.task()
+        self.assertEqual(t["status"], "blocked")
+        self.assertIn("no runnable check", t["reason"])
+
+    # 8. a secret in check output reaches neither tasks.json nor the next goal
+    def test_secret_in_failed_check_redacted_in_tasks_and_goal(self):
+        tail = "A1b2C3d4E5f6G7h8I9j0"
+        self.store.add("Add a", verify=[f'{PY} -c "import sys; print(\'sk-\' + \'{tail}\'); sys.exit(1)"'])
+        self.scenario(GOAL_DONE)
+        self.runner().run()
+        goal = (self.repo / ".council" / "state" / "goal.md").read_text()
+        self.assertIn("Previous attempt failed", goal)
+        for text in (goal, self.store.path.read_text()):
+            self.assertNotIn("sk-" + tail, text)
+
+    # 9. a manual /council-cycle's fresh cycle.lock is respected
+    def test_fresh_cycle_lock_without_claimed_task_refused(self):
+        self.store.add("Add a", verify=[PASS])
+        lock = self.lock_file()
+        (self.repo / "wip.txt").write_text("manual cycle work\n")
+        self.scenario(GOAL_DONE)
+        res = self.runner().run()
+        self.assertEqual(res["exit_code"], 2)
+        self.assertIn("manual /council-cycle appears to be running", res["stop_reason"])
+        self.assertTrue(lock.exists())
+        self.assertTrue((self.repo / "wip.txt").exists())  # not stashed
+        self.assertEqual(self.calls(), 0)
+        self.assertEqual(self.task()["status"], "pending")
+
+    def test_fresh_cycle_lock_with_claimed_task_recovered(self):
+        self.store.add("Add a", verify=[PASS])
+        self.store.claim("dead-runner")
+        self.lock_file()
+        self.scenario(GOAL_DONE)
+        res = self.runner().run()
+        self.assertEqual(res["exit_code"], 0)
+        self.assertEqual(self.task()["status"], "done")
+        self.assertTrue(any(r["event"] == "recover" and r["outcome"] == "requeued" for r in self.rows()))
+
+    def test_run_never_leaves_a_cycle_lock(self):
+        self.store.add("Never finishes", verify=[PASS])
+        self.scenario({})
+        r = self.runner()
+        real = r._session
+
+        def session_leaves_lock(tid):
+            out = real(tid)
+            self.lock_file()  # what a cycle killed mid-way would leave behind
+            return out
+        r._session = session_leaves_lock
+        res = r.run(max_sessions=1)
+        self.assertIn("max_sessions", res["stop_reason"])
+        self.assertFalse((self.repo / ".council" / "state" / "cycle.lock").exists())
+
+    # 6. the guard hook needs a Python launcher
+    def test_no_python_launcher_refused(self):
+        with mock.patch.object(lr.shutil, "which", return_value=None):
+            res = self.runner().run()
+        self.assertEqual(res["exit_code"], 2)
+        self.assertIn("guard hook cannot run", res["stop_reason"])
+
+    def test_hooks_json_tries_every_launcher(self):
+        hooks = json.loads((Path(lr.PLUGIN_ROOT) / "hooks" / "hooks.json").read_text())
+        cmd = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        for launcher in ('python3 "', '|| python "', '|| py -3 "'):
+            self.assertIn(launcher, cmd)
+        self.assertEqual(cmd.count("guard.py"), 3)
+
+    # 3. a session left running by a SIGKILLed runner is killed before recovery
+    @unittest.skipUnless(sys.platform.startswith("linux"), "uses /proc start times and process groups")
+    def test_orphaned_session_killed_by_recover(self):
+        import signal
+        pidfile = self.repo / ".council" / "state" / "session.pid"
+        fake_runner = subprocess.Popen(
+            [sys.executable, "-c",
+             "import sys; sys.path.insert(0, sys.argv[1]); import loop_runner as lr; from pathlib import Path;"
+             "lr._spawn([sys.executable, '-c', 'import time; time.sleep(120)'], '.', 300, pidfile=Path(sys.argv[2]))",
+             str(Path(lr.__file__).parent), str(pidfile)])
+        self.addCleanup(fake_runner.wait)
+        self.addCleanup(fake_runner.kill)
+        for _ in range(100):
+            if pidfile.exists():
+                break
+            time.sleep(0.05)
+        info = json.loads(pidfile.read_text())
+        self.assertIsNotNone(info["start"])
+        os.kill(fake_runner.pid, signal.SIGKILL)  # the runner dies; its session lives on
+        fake_runner.wait()
+        self.assertTrue(alive(info["pid"]))
+        self.assertEqual(lr.kill_stale_session(pidfile), "killed")
+        for _ in range(50):
+            if not alive(info["pid"]):
+                break
+            time.sleep(0.1)
+        self.assertFalse(alive(info["pid"]))
+        self.assertFalse(pidfile.exists())
+        self.assertIsNone(lr.kill_stale_session(pidfile))  # no pidfile: nothing to do
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "uses /proc start times and process groups")
+    def test_stale_pidfile_with_other_start_kills_nothing(self):
+        bystander = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"], start_new_session=True)
+        self.addCleanup(bystander.wait)
+        self.addCleanup(bystander.kill)
+        pidfile = self.repo / ".council" / "state" / "session.pid"
+        pidfile.parent.mkdir(parents=True, exist_ok=True)
+        pidfile.write_text(json.dumps({"pid": bystander.pid, "start": "1"}))  # pid reused by another process
+        self.assertEqual(lr.kill_stale_session(pidfile), "stale")
+        time.sleep(0.2)
+        self.assertIsNone(bystander.poll())
+        self.assertFalse(pidfile.exists())
+
+    def test_session_pidfile_removed_after_session(self):
+        self.store.add("Add a", verify=[PASS])
+        self.scenario(GOAL_DONE)
+        self.runner().run()
+        self.assertEqual(self.task()["status"], "done")
+        self.assertFalse((self.repo / ".council" / "state" / "session.pid").exists())
+
+    # review: on Windows a leftover pidfile is never taskkilled (the pid may be reused)
+    def test_windows_stale_pidfile_never_taskkilled(self):
+        pidfile = self.repo / ".council" / "state" / "session.pid"
+        pidfile.parent.mkdir(parents=True, exist_ok=True)
+        pidfile.write_text(json.dumps({"pid": os.getpid(), "start": None}))
+        # lr.Path pinned to the native class so a faked os.name can't make a WindowsPath on older Pythons.
+        with mock.patch.object(lr.os, "name", "nt"), mock.patch.object(lr, "Path", type(pidfile)), \
+                mock.patch.object(lr.subprocess, "run") as run, mock.patch.object(lr.os, "killpg") as killpg:
+            self.assertEqual(lr.kill_stale_session(pidfile), "stale")
+        run.assert_not_called()
+        killpg.assert_not_called()
+        self.assertFalse(pidfile.exists())
+
+    # review: a Job Object whose assign fails is closed, and the command still runs
+    def test_job_closed_when_assign_fails(self):
+        import io
+        fake = mock.Mock()
+        fake.create.return_value = 42
+        fake.assign.side_effect = OSError("access denied")
+        with mock.patch.object(lr.os, "name", "nt"), mock.patch.dict(sys.modules, {"win_job": fake}), \
+                mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            self.assertIsNone(lr._job_create(mock.Mock()))
+        fake.close.assert_called_once_with(42)
+        self.assertIn("Job Object unavailable", err.getvalue())
+
+    # 4. Windows Job Object: a detached grandchild dies with the command
+    @unittest.skipUnless(os.name == "nt", "Job Objects are Windows-only")
+    def test_job_object_kills_detached_child(self):
+        pid_file = self.fake_dir / "detached.pid"
+        code = ("import subprocess,sys;"
+                "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(120)'],"
+                "creationflags=subprocess.DETACHED_PROCESS);"
+                f"open(r'{pid_file}','w').write(str(p.pid))")
+        rc, _, _ = lr._spawn([sys.executable, "-c", code], self.repo, 60)
+        self.assertEqual(rc, 0)
+        pid = int(pid_file.read_text())
+        for _ in range(50):
+            if not alive(pid):
+                break
+            time.sleep(0.1)
+        self.assertFalse(alive(pid), "detached child outlived the command")
 
 
 if __name__ == "__main__":
