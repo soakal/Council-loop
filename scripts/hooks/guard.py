@@ -351,6 +351,26 @@ def rule_loop_state_bash(s):
     return any_path(targets, s.ctx["cwd"], is_loop_state_path)
 
 
+LOOP_CLI_WRITES = {"resume", "add", "init", "run", "note"}
+PYTHONS = {"python", "python3", "py", "pythonw"}
+
+
+def rule_loop_cli(s):
+    """During a loop run: no loop CLI state changes (approve/unblock/add/...); those are owner-only."""
+    if not s.ctx["loop_run"]:
+        return False
+    if s.cmd in PYTHONS:  # python3 .../loop.py <sub>: look at what follows the script
+        script = next((i for i, a in enumerate(s.low) if not a.startswith("-")), None)
+        if script is None or re.split(r"[\\/]", s.low[script])[-1] != "loop.py":
+            return False
+        rest = s.low[script + 1:]
+    elif s.cmd in ("loop", "loop.cmd", "loop.py"):
+        rest = s.low
+    else:
+        return False
+    return any(a in LOOP_CLI_WRITES for a in rest)
+
+
 BASH_RULES = [
     ("rm-recursive-force", "Recursive force delete (rm -rf, Remove-Item -Recurse -Force, rd /s) is blocked.", rule_rm_rf),
     ("git-push-force", "Force push (--force, -f, --force-with-lease, --mirror, +refspec) is blocked.", rule_push_force),
@@ -360,6 +380,7 @@ BASH_RULES = [
     ("credential-read", "Reading credential files (.env, keys, .netrc, cloud/Infisical config) is blocked.", rule_cred_bash),
     ("infisical-write", "infisical secrets set/delete is blocked.", rule_infisical),
     ("loop-state-write", "During a loop run, tasks/tasks.json, .council/config*.json and the run journal are owned by the runner.", rule_loop_state_bash),
+    ("loop-cli-write", "During a loop run, loop state changes (loop init/add/run/resume/note) are owner-only.", rule_loop_cli),
 ]
 
 

@@ -1,0 +1,3 @@
+#!/bin/sh
+# loop -- Council Loop CLI (POSIX wrapper around scripts/loop.py). See: loop --help
+exec python3 "$(dirname "$0")/scripts/loop.py" "$@"
