@@ -30,3 +30,11 @@ Approximate. Tokens are what the harness reports per subagent; "Codex" rows are 
 | T8b | implement (Codex fixes + flaky test) | Opus 5.5 | ~152k | 162 tests ×5 runs pass. Test change #10: tree-kill test read /proc twice (race) → single read, ProcessLookupError/FileNotFound/Z = gone, 5 s bound; still fails with killpg disabled |
 | T8b | review | Fable 5.2 | ~84k | 1 required (Windows taskkill pid reuse), test #10 change approved as not weakening |
 | T8b | review fixes | Opus 5.5 | ~10k (incremental) | 165 tests pass ×2 |
+| Dogfood run 1 | loop run (t09) | council (opus) via claude -p | 188k / $1.06 | blocked: auto-mode classifier "no verdict" on Engineer Write/Edit |
+| Dogfood run 2 | loop run (t09) | council (opus) via claude -p | see status | edits allowed via loop.allowed_tools; classifier still refused Write of new loop_notify.py (credential+network code) |
+| T10w | Windows fixes | Opus 5.5 | pending | from Tiny11 run: 1 fail, 33 errors |
+| T9 | implement (fallback: classifier refused twice) | Opus 5.5 | pending | built outside loop on task branch; loop gates + merges |
+| T10w | Windows fixes | Opus 5.5 | ~101k | Tiny11 rerun: 166 OK (skipped=4); Linux 166 OK. Test changes: cleanup ordering (temp dir deleted after holders killed), killpg create=True (Windows os lacks it), quoted -C path (bash strips backslashes) |
+| T9 | implement (fallback) | Opus 5.5 | ~109k | 175 tests pass; notify.enabled default false |
+| Windows | Tiny11 test runs ×2 | orchestrator | — | run1 3e0b7b3: 1 fail/33 err; run2 9139f8e: 166 OK |
+| T9+T10w | review | Fable 5.2 | see notification | T10w APPROVE incl. 3 test changes; T9 CHANGES (id:null not paged, test_cli hits real secret) |

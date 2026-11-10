@@ -1,0 +1,330 @@
+.........................................................................................[loop] run - start
+[loop] recover t001 requeued
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+.loop run: a manual /council-cycle appears to be running (cycle.lock from 2026-11-10T05:38:19Z); wait for it or delete C:\Windows\Temp\tmpdt797k_9\.council\state\cycle.lock
+....[loop] run - start
+[loop] task t001 blocked no runnable check -- add --verify to the task or test_commands to the config
+[loop] escalate t001 blocked no runnable check -- add --verify to the task or test_commands to the config
+[loop] run - end no runnable task left
+.loop run: no python3 / python / py on PATH -- the guard hook cannot run
+.s[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] cap t001 stop max_sessions reached (1)
+[loop] escalate - cap max_sessions reached (1)
+[loop] task t001 released
+[loop] run - end max_sessions reached (1)
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+[loop] run - start
+[loop] attempt t002 start
+[loop] task t002 released
+loop run: runner crashed: FileNotFoundError: [WinError 2] The system cannot find the file specified
+[loop] run - crash runner crashed: FileNotFoundError: [WinError 2] The system cannot find the file specified
+[loop] escalate - crash runner crashed: FileNotFoundError: [WinError 2] The system cannot find the file specified
+loop run: a manual /council-cycle appears to be running (cycle.lock from 2026-11-10T05:38:39Z); wait for it or delete C:\Windows\Temp\tmpc9eeki5o\.council\state\cycle.lock
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 retry verify failed on a44bf5e53018: check failed (1): "C:\cltest\py\python.exe" -c "import sys; print('sk-' + 'A1b2C3d4E5f6G7h8I9j0'); sys.exit(1)"
+sk-A1b2C3d4E5f6G7h8I9j0
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 retry verify failed on 123d494e589b: check failed (1): "C:\cltest\py\python.exe" -c "import sys; print('sk-' + 'A1b2C3d4E5f6G7h8I9j0'); sys.exit(1)"
+sk-A1b2C3d4E5f6G7h8I9j0
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 failed verify failed on 4920cfc9853e: check failed (1): "C:\cltest\py\python.exe" -c "import sys; print('sk-' + 'A1b2C3d4E5f6G7h8I9j0'); sys.exit(1)"
+sk-A1b2C3d4E5f6G7h8I9j0
+[loop] escalate - run_failed run ended with 1 failed task(s)
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+.s.loop run: invalid council config: loop.permission_mode bypassPermissions is refused: unattended sessions must keep permission checks -- use one of: acceptEdits, auto, dontAsk, manual, plan
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 retry no commits on task branch
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 retry no commits on task branch
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 failed no commits on task branch
+[loop] escalate - run_failed run ended with 1 failed task(s)
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] task t001 blocked verification inputs changed: run journal unreadable
+[loop] escalate t001 blocked verification inputs changed: run journal unreadable
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] task t001 released
+loop run: runner crashed: FileNotFoundError: [WinError 2] The system cannot find the file specified
+[loop] run - crash runner crashed: FileNotFoundError: [WinError 2] The system cannot find the file specified
+[loop] escalate - crash runner crashed: FileNotFoundError: [WinError 2] The system cannot find the file specified
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked blocked: needs a key
+[loop] escalate t001 blocked blocked: needs a key
+[loop] escalate t002 blocked a dependency failed or is blocked
+[loop] run - end no runnable task left
+..[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] backoff t001 usage_limit
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] task t001 blocked verification inputs changed: run journal frozen copy is malformed
+[loop] escalate t001 blocked verification inputs changed: run journal frozen copy is malformed
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked no goal set
+[loop] escalate t001 blocked no goal set
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] cap t001 stop max_sessions reached (50)
+[loop] escalate - cap max_sessions reached (50)
+[loop] task t001 released
+[loop] run - end max_sessions reached (50)
+[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] cap t001 stop max_sessions reached (1)
+[loop] escalate - cap max_sessions reached (1)
+[loop] task t001 released
+[loop] run - end max_sessions reached (1)
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+.s[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 timeout
+[loop] backoff t001 error
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] cap t001 stop max_sessions reached (50)
+[loop] escalate - cap max_sessions reached (50)
+[loop] task t001 released
+[loop] run - end max_sessions reached (50)
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 usage_limit
+[loop] backoff t001 usage_limit
+[loop] cap t001 stop max_hours reached
+[loop] escalate - cap max_hours reached
+[loop] task t001 released
+[loop] run - end max_hours reached
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked blocked: needs an API key
+[loop] escalate t001 blocked blocked: needs an API key
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] stash t001 saved crash recovery
+[loop] recover t001 requeued
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 retry verify failed on f1907c72ae6a: check failed (1): "C:\cltest\py\python.exe" -c "import sys; sys.exit(1)"
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 retry verify failed on 7cdd7eb42853: check failed (1): "C:\cltest\py\python.exe" -c "import sys; sys.exit(1)"
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 failed verify failed on c6a57abbf4c5: check failed (1): "C:\cltest\py\python.exe" -c "import sys; sys.exit(1)"
+[loop] escalate - run_failed run ended with 1 failed task(s)
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 blocked git error: git merge failed (1): boom
+[loop] escalate t001 blocked git error: git merge failed (1): boom
+[loop] attempt t002 start
+[loop] session t002 ok
+[loop] task t002 done
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 usage_limit
+[loop] backoff t001 usage_limit
+[loop] session t001 usage_limit
+[loop] backoff t001 usage_limit
+[loop] session t001 usage_limit
+[loop] backoff t001 usage_limit
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] recover t001 requeued
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+.loop run: runtime paths are not git-excluded (tasks/tasks.json, tasks/tasks.lock, logs/loop.jsonl, .council/state/run.lock, .council/config.json, .council/config.local.json) -- run `loop init` first
+..loop run: another loop run is active on this project (run.lock held)
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 timeout
+[loop] cap t001 stop max_hours reached
+[loop] escalate - cap max_hours reached
+[loop] task t001 released
+[loop] run - end max_hours reached
+.[loop] run - start
+[loop] attempt t001 start
+[loop] session t001 ok
+[loop] session t001 ok
+[loop] task t001 done
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] task t001 blocked verification inputs changed: verify
+[loop] escalate t001 blocked verification inputs changed: verify
+[loop] run - end no runnable task left
+.[loop] run - start
+[loop] recover t001 done
+[loop] run - end no runnable task left
+.....................s...........
+----------------------------------------------------------------------
+Ran 166 tests in 377.976s
+
+OK (skipped=4)
