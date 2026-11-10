@@ -6,6 +6,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -130,6 +131,11 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _id_key(task_id: str) -> list:
+    """Natural sort key so t999 comes before t1000."""
+    return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", task_id)]
+
+
 def _find_cycle(tasks: list[dict]) -> list[str] | None:
     """Return one dependency cycle as a list of ids, or None."""
     deps = {t["id"]: t.get("depends_on", []) for t in tasks}
@@ -180,6 +186,11 @@ class TaskStore:
             raise TaskStoreError(f"{self.path} has no 'tasks' list; fix or restore it by hand")
         if data.get("version") != 1:
             raise TaskStoreError(f"{self.path}: unsupported version {data.get('version')!r}")
+        # Catch hand edits that would otherwise surface as a KeyError later.
+        for i, task in enumerate(data["tasks"]):
+            if (not isinstance(task, dict) or not isinstance(task.get("id"), str)
+                    or task.get("status") not in STATUSES):
+                raise TaskStoreError(f"{self.path}: task #{i} needs a string 'id' and a valid 'status'")
         return data
 
     @contextlib.contextmanager
@@ -257,7 +268,7 @@ class TaskStore:
                      if t["status"] == "pending" and all(d in done for d in t.get("depends_on", []))]
             if not ready:
                 return None
-            task = min(ready, key=lambda t: t["id"])
+            task = min(ready, key=lambda t: _id_key(t["id"]))
             now = _now()
             task.update(status="claimed", owner=owner, claimed_at=now, updated_at=now)
         return task

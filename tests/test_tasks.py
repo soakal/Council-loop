@@ -76,6 +76,18 @@ class TaskStoreTests(unittest.TestCase):
         self.assertEqual(self.store.claim("w")["id"], "t002")
         self.assertIsNone(self.store.claim("w"))
 
+    def test_claim_uses_numeric_id_order(self):
+        self.store.add("later", task_id="t1000")
+        self.store.add("earlier", task_id="t999")
+        self.assertEqual(self.store.claim("w")["id"], "t999")
+
+    def test_task_missing_id_or_status_rejected(self):
+        self.store.path.parent.mkdir(parents=True)
+        for bad in ({"status": "pending"}, {"id": "t001"}, {"id": "t001", "status": "weird"}):
+            self.store.path.write_text(json.dumps({"version": 1, "tasks": [bad]}))
+            with self.assertRaisesRegex(TaskStoreError, "task #0"):
+                self.store.load()
+
     def test_block_unreachable_transitive(self):
         self.store.add("a")
         self.store.add("b", depends_on=["t001"])
