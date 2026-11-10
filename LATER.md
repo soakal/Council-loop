@@ -1,0 +1,14 @@
+# LATER — out of scope for the console-loop revamp
+
+One line per item. Nothing here gets built without a new approved plan.
+
+- Parallel launcher (`loop run --workers N`, one git worktree per worker) — store is already safe for it.
+- Read Telegram replies to unblock a task from the phone.
+- Night Shift "coding task" mode / scheduled `loop status --json` report routine.
+- Per-task model overrides; per-run dollar cap (`--max-budget-usd`).
+- Web or TUI dashboard.
+- Rewrite `set-target.*` / `start-council.*`; council role prompt changes beyond the `BLOCKED` rule.
+- Sandbox/container isolation for loop sessions.
+- More secret backends (Vault, 1Password, Proton Pass).
+- Fix the age-based `cycle.lock` for manual `/loop` use (loop runs no longer depend on it).
+- Remote branch `origin/claude/agents-used-euwqve` (Verifier tally in run-summary) — left alone by owner decision 2026-11-09.
