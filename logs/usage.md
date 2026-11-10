@@ -14,3 +14,5 @@ Approximate. Tokens are what the harness reports per subagent; "Codex" rows are 
 | T3 | implement | Opus 5.5 | ~114k | 12 tests + validate.sh pass |
 | T1 | implement | Opus 5.5 | ~103k | 22 tests pass |
 | T1–T4 | review | Fable 5.2 | ~124k | T2 approve; T1/T3/T4 changes sent back |
+| T1–T4 | review fixes | Opus 5.5 | ~40k total (incremental) | 68 tests + validate.sh pass after merge |
+| T5 | implement | Opus 5.5 | ~99k | 14 new tests, 82 total pass |

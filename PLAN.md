@@ -203,7 +203,7 @@ This will be re-checked against real run data in the final report.
 
 ## 8. Owner decisions (answered 2026-11-09)
 
-1. **Telegram:** bot token read via `secret run NIGHTSHIFT_TELEGRAM_BOT_TOKEN` (already in the Infisical mirror). Owner chat ID stored once as `NIGHTSHIFT_TELEGRAM_OWNER_ID` via a single `secret ask` pop-up when the alert task is built; `secret` mirrors it to Infisical. Secrets backend = `command` backend wrapping `secret` (default); Infisical CLI stays a pluggable alternative. Infisical config untouched.
+1. **Escalation (revised 2026-11-09, owner asked "can't u use telegram for night shift or nexus"):** escalate through **NEXUS**: `POST $NEXUS_BASE_URL/api/safety/flags` with `{"source":"council_loop","check":<event>,"summary":...,"page_now":true}` and `Authorization: Bearer $NEXUS_API_KEY` (key fetched via the secrets backend = `secret`; already used by `postmortem_payload.py`). NEXUS pages the owner's phone via its own Telegram bot — no owner chat ID needed, Night Shift untouched. Fallback when NEXUS is unreachable or the key is missing: `logs/escalations.md` + warning in `loop status`, run continues. Direct send through Night Shift's bot → LATER.md. Secrets backend = `command` wrapping `secret` (default); Infisical CLI stays a pluggable alternative. Infisical config untouched.
 2. **Hook scope:** loop-run sessions + sessions in this repo only.
 3. **D1:** approved — replace `guard_state_and_secrets.sh` with `guard.py`.
 4. **D2:** approved — `run-loop.sh` / `run-loop.ps1` become thin wrappers.

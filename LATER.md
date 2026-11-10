@@ -4,6 +4,7 @@ One line per item. Nothing here gets built without a new approved plan.
 
 - Parallel launcher (`loop run --workers N`, one git worktree per worker) — store is already safe for it.
 - Read Telegram replies to unblock a task from the phone.
+- Direct Telegram send through Night Shift's bot (needs an owner chat ID); escalation goes via NEXUS flags instead (owner decision 2026-11-09).
 - Night Shift "coding task" mode / scheduled `loop status --json` report routine.
 - Per-task model overrides; per-run dollar cap (`--max-budget-usd`).
 - Web or TUI dashboard.
